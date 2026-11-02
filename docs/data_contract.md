@@ -132,7 +132,7 @@ core.summarize.generate_summary(record: PatientRecord, asked: list[QuestionAnswe
 
 ## Errors (core.llm)
 
-LLMError base, with ConfigError, LLMAuthError, LLMQuotaError, LLMNetworkError, LLMServerError, LLMResponseError. Each has a safe English message with no API key and no patient text. On any error the caller's inputs are unchanged.
+LLMError base, with ConfigError, LLMAuthError, LLMQuotaError, LLMNetworkError, LLMServerError, LLMResponseError and LLMContentFilterError (the provider's content filter rejected the text). Each has a safe English message with no API key and no patient text. On any error the caller's inputs are unchanged.
 
 ## Alerts
 
