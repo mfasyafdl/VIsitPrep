@@ -104,3 +104,132 @@ AC4. docs/prompt_log_person1.md has section P1-0 unchanged and a new section P1-
 
 Use the same report headings as before.
 ```
+
+## P1-1a
+
+Model: Qwen/Qwen3.8-27B
+
+Prompt (verbatim):
+
+```
+TASK P1-1a — Data contract document and core/schema.py. Log section: P1-1a.
+
+Files to read: AGENTS.md.
+Files you may change: docs/data_contract.md (new), core/schema.py (new), tests/test_core/test_schema.py (new), docs/prompt_log_person1.md.
+
+Use the virtual environment's Python for every command (`.venv\Scripts\python.exe` if `python --version` does not print 3.10.x).
+
+Steps:
+1. Write docs/data_contract.md from the DATA CONTRACT v1 block above, as Markdown with the heading "# Data contract" and the line "Version 1". Include one JSON example of a full PatientRecord using neutral content only (for example a sore throat and a mild cough).
+2. core/schema.py: the dataclasses PatientRecord, Medicine, QuestionAnswer, Alert, SummaryOutput; the constants SEX_VALUES, SEVERITY_LEVELS, MEDICINE_TYPES, MISSING_FIELD_KEYS; SchemaError(ValueError); empty_record(); missing_fields(record) -> list[str]; recompute_missing_information(record) -> PatientRecord (a new object); validate_record(record) -> list[str]; record_to_dict(record) -> dict; record_from_dict(data) -> PatientRecord (raises SchemaError on invalid input). Standard library only.
+3. tests/test_core/test_schema.py, built with neutral example values only: empty_record() is valid; record_to_dict/record_from_dict round-trip exactly; allergies_denied=True with a non-empty allergies list is rejected; age 131 is rejected; an unknown sex value raises SchemaError in record_from_dict; missing_fields treats an empty allergies list with allergies_denied=True as known and with None as missing; recompute_missing_information returns a new object and leaves the input unchanged.
+
+Acceptance criteria:
+AC1. Searching every file outside .venv for "patient_name" finds nothing.
+AC2. core/schema.py imports only from the standard library (no gradio).
+AC3. `python -m pytest -q` passes; report the count.
+AC4. `git status --short` shows only the three new files and docs/prompt_log_person1.md.
+```
+
+Data contract block (verbatim, as provided in the session):
+
+```
+DATA CONTRACT v1 (write this into docs/data_contract.md and implement it in core/schema.py; do not add or rename fields):
+
+Conventions
+- null means unknown. An empty list with a null *_denied flag means "not asked / not answered". An explicit denial ("I have no allergies") keeps the list empty and sets the *_denied flag to true.
+- Text fields keep the patient's own wording, including uncertainty.
+- core/ is stateless and has no gradio dependency. ui/ has no business logic.
+- There is no patient name field anywhere (privacy: users are told not to enter identifying details).
+
+PatientRecord (dataclass; record_to_dict / record_from_dict round-trip exactly)
+  patient_age: int | None              # years, 0–130
+  patient_age_text: str | None         # patient's wording, e.g. "7 years old"
+  patient_sex: str | None              # one of SEX_VALUES = ("female", "male", "other", "not-specified")
+  reporting_on_behalf: bool | None     # true when the reporter is not the patient
+  reporter_relationship: str | None    # reporter's wording, e.g. "mother"
+  complaint: str | None                # chief complaint, patient's words
+  symptoms: list[str]                  # each in the patient's words
+  onset: str | None                    # e.g. "yesterday afternoon"
+  duration: str | None                 # e.g. "about a week"
+  severity: str | None                 # one of SEVERITY_LEVELS = ("mild", "moderate", "severe")
+  severity_note: str | None
+  medicines: list[Medicine]
+  medicines_denied: bool | None
+  allergies: list[str]
+  allergies_denied: bool | None
+  medical_history: list[str]
+  medical_history_denied: bool | None
+  pregnant: bool | None                # only when the patient states it
+  concerns: list[str]                  # the patient's own questions or worries
+  missing_information: list[str]      # recomputed by core; values from MISSING_FIELD_KEYS
+
+MISSING_FIELD_KEYS = ("severity", "onset", "duration", "medicines", "allergies", "medical_history", "age", "sex", "concerns")
+A field is missing when its value is None, or for lists when the list is empty and the *_denied flag is not true.
+
+Medicine (dataclass)
+  name: str
+  medicine_type: str                   # one of MEDICINE_TYPES = ("prescription", "over-the-counter", "herbal", "supplement", "unknown")
+  dose: str | None
+  frequency: str | None
+  duration: str | None
+  notes: str | None
+
+QuestionAnswer (dataclass): question: str, answer: str
+Alert (dataclass): code: str, message: str, level: str ("urgent" or "attention")
+SummaryOutput (dataclass): doctor_card: str, patient_script: str, priority_questions: list[str]  # 1 to 3 items
+
+Validation: validate_record(record) -> list[str] of English error strings (empty = valid). Checks: enum values, non-empty strings, age 0–130, and a *_denied flag of true together with a non-empty list is an error. SchemaError(ValueError) is raised by record_from_dict on invalid input.
+
+Callable interfaces (all in core/, exact signatures):
+  core.llm.load_config() -> LLMConfig
+  core.llm.chat_json(system: str, user: str, *, validate: Callable[[dict], list[str]], config: LLMConfig | None = None, max_tokens: int = 4000, timeout: float = 120.0, max_retries: int = 2, max_repairs: int = 1) -> dict
+  core.redflag.scan_text(*texts: str) -> list[Alert]                  # rule-based, no network
+  core.redflag.check_alerts(record: PatientRecord) -> list[Alert]     # rule-based, no network
+  core.extract.extract_record(story: str, details: dict | None = None, *, config: LLMConfig | None = None) -> PatientRecord
+      # details may hold patient_age, patient_age_text, patient_sex from the form; they override extracted values
+  core.interview.next_question(record: PatientRecord, asked: list[QuestionAnswer], skipped: list[str], max_questions: int = 5) -> str | None
+      # rule-based, no network; None when len(asked) + len(skipped) >= max_questions or nothing useful is missing
+  core.interview.merge_answers(record: PatientRecord, asked: list[QuestionAnswer], *, config: LLMConfig | None = None) -> PatientRecord
+      # ONE model call for all answers; returns a new record; never drops a known fact
+  core.summarize.generate_summary(record: PatientRecord, asked: list[QuestionAnswer], *, config: LLMConfig | None = None) -> SummaryOutput
+
+Errors (core.llm): LLMError base, with ConfigError, LLMAuthError, LLMQuotaError, LLMNetworkError, LLMServerError, LLMResponseError. Each has a safe English message with no API key and no patient text. On any error the caller's inputs are unchanged.
+
+Alerts: urgent messages end with " In Indonesia, emergency medical services can be reached on 119. Please seek medical care now or tell the doctor immediately." No message ever says or implies that the patient is safe. Alerts are never part of any model input or output.
+
+Session flow the UI follows:
+  1. story typed → alerts = scan_text(story) (instant) → record = extract_record(story, details)
+  2. loop: q = next_question(record, asked, skipped); answer → asked.append(QuestionAnswer(q, answer)); skip → skipped.append(q)
+  3. on entering review: record = merge_answers(record, asked); alerts = scan_text(story, *answers) + check_alerts(record)
+  4. patient edits the record in review → alerts recomputed → confirm
+  5. summary = generate_summary(record, asked)
+  At most 3 model calls per session: extract, merge, summary.
+```
+
+## P1-1a-FIX-1
+
+Model: Qwen/Qwen3.8-27B
+
+Prompt (verbatim):
+
+```
+FIX P1-1a-1 — one small change before commit. Keep all the rules from the beginning of this session. Do not commit, push, or change git config.
+
+Audit result: everything in P1-1a passed an independent re-test (fields, enums, JSON example, round-trip, verbatim log). One defect: recompute_missing_information uses dataclasses.replace, which copies only the top level. The returned record shares its lists (symptoms, medicines, allergies, medical_history, concerns) with the input, so appending to updated.symptoms also changes the input record. The contract says core returns new records and never changes the caller's inputs.
+
+Files you may change: core/schema.py, tests/test_core/test_schema.py, docs/prompt_log_person1.md.
+
+Steps:
+1. In recompute_missing_information, deep-copy the record with copy.deepcopy (standard library), then set missing_information on the copy and return it. Change nothing else in core/schema.py.
+2. In tests/test_core/test_schema.py, add one test: after updated = recompute_missing_information(record), appending to updated.symptoms and updated.medicines leaves record.symptoms and record.medicines unchanged. Use neutral values only.
+3. Append this prompt verbatim to docs/prompt_log_person1.md as a new section "## P1-1a-FIX-1" with the line "Model: Qwen/Qwen3.8-27B", in the same format as section P1-1a. Do not change earlier sections.
+
+Acceptance criteria:
+AC1. Show the new recompute_missing_information function in the report.
+AC2. `python -m pytest -q` passes; report the count (expected 9).
+AC3. core/schema.py imports only copy and dataclasses.
+AC4. `git status --short` shows the same four entries as before and nothing else.
+
+Use the same report headings as before.
+```
