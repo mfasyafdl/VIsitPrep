@@ -147,3 +147,21 @@ Urgent messages end with " In Indonesia, emergency medical services can be reach
 5. summary = generate_summary(record, asked)
 
 At most 3 model calls per session: extract, merge, summary.
+
+## Fixtures (tests and preview only)
+
+All people and details in core/fixtures.py are fictional. The module defines:
+
+- `FIXTURE_NAMES = ("fever_adult", "child_cough", "chest_pain")`
+- `FIXTURE_EMPTY` — the empty record with missing_information recomputed
+- `FIXTURE_FEVER_ADULT` — fictional 34-year-old female with a fever and headache; allergies explicitly denied
+- `FIXTURE_CHILD_COUGH` — fictional 7-year-old male with a cough worse at night, reported by his mother
+- `FIXTURE_CHEST_PAIN` — fictional 52-year-old female with a tight chest pain that comes and goes
+- `FIXTURE_STORIES` — dict keyed by FIXTURE_NAMES; one first-person story per fixture, copied exactly
+- `FIXTURE_SUMMARIES` — dict keyed by FIXTURE_NAMES; fictional example output for the UI preview only
+- `all_fixtures() -> dict[str, PatientRecord]` — keys "empty" plus FIXTURE_NAMES; values are deep copies
+- `get_fixture(name: str) -> PatientRecord` — deep copy; "empty" is allowed; unknown name raises KeyError
+- `get_summary(name: str) -> SummaryOutput` — deep copy; unknown name raises KeyError
+- `match_story(story: str) -> str | None` — exact match after stripping and collapsing all runs of whitespace to one space; no fuzzy matching
+
+UI code uses get_fixture and get_summary (copies), never the module constants directly.
