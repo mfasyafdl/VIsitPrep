@@ -6,11 +6,6 @@ from core import extract, interview, llm, redflag, summarize
 from core.schema import empty_record
 
 STUB_CALLS = [
-    pytest.param(lambda: llm.load_config(), id="llm.load_config"),
-    pytest.param(
-        lambda: llm.chat_json("system", "user", validate=lambda d: []),
-        id="llm.chat_json",
-    ),
     pytest.param(lambda: redflag.scan_text("a short story"), id="redflag.scan_text"),
     pytest.param(
         lambda: redflag.check_alerts(empty_record()), id="redflag.check_alerts"
