@@ -1,0 +1,369 @@
+"""Theme tokens and static CSS for the VisitPrep UI.
+
+Every colour is defined once as a CSS custom property on #vp-root with
+light values, and overridden for dark mode under .dark #vp-root (Gradio
+adds the dark class to the body) and inside @media (prefers-color-scheme:
+dark). No hex values may appear outside the token blocks.
+
+THEME_CSS is passed to launch(css=...) and THEME_HEAD to launch(head=...)
+in gradio 6.31.0 (css/head moved from the Blocks constructor to launch
+in gradio 6.0).
+"""
+
+THEME_HEAD = (
+    '<link rel="preconnect" href="https://fonts.googleapis.com">'
+    '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>'
+    '<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible'
+    '+Next:wght@400;600;700;800&display=swap" rel="stylesheet">'
+)
+
+_LIGHT_TOKENS = """\
+  --vp-ground: #EEF4F2;
+  --vp-surface: #FFFFFF;
+  --vp-ink: #15232A;
+  --vp-ink-2: #44565E;
+  --vp-primary: #0B6B60;
+  --vp-on-primary: #FFFFFF;
+  --vp-pressed-edge: #06443D;
+  --vp-tint: #DCEEEA;
+  --vp-on-tint: #0B4F47;
+  --vp-input-border: #6B7F84;
+  --vp-hairline: #D3E0DD;
+  --vp-urgent-band: #C42B1C;
+  --vp-urgent-card-border: #C42B1C;
+  --vp-attn-band: #FFD84D;
+  --vp-urgent-band-text: #FFFFFF;
+  --vp-attn-band-text: #15232A;
+  --vp-focus: #FFD84D;
+"""
+
+_DARK_TOKENS = """\
+  --vp-ground: #0E1A1C;
+  --vp-surface: #16252A;
+  --vp-ink: #E3EEEC;
+  --vp-ink-2: #AFC2C1;
+  --vp-primary: #4FC1B1;
+  --vp-on-primary: #052421;
+  --vp-pressed-edge: #2E8C80;
+  --vp-tint: #1D3A3A;
+  --vp-on-tint: #BDEDE5;
+  --vp-input-border: #6F8A8D;
+  --vp-hairline: #27393D;
+  --vp-urgent-band: #C42B1C;
+  --vp-urgent-card-border: #FF8A7A;
+  --vp-attn-band: #FFD84D;
+  --vp-urgent-band-text: #FFFFFF;
+  --vp-attn-band-text: #15232A;
+  --vp-focus: #FFD84D;
+"""
+
+THEME_CSS = f"""
+/* VisitPrep theme tokens (light values). */
+#vp-root {{
+{_LIGHT_TOKENS}
+  background: var(--vp-ground);
+  color: var(--vp-ink);
+  font-family: "Atkinson Hyperlegible Next", system-ui, sans-serif;
+  font-size: 17px;
+  line-height: 1.5;
+  width: 100%;
+  min-height: 100vh;
+}}
+
+/* Dark tokens when Gradio marks the body as dark. */
+.dark #vp-root {{
+{_DARK_TOKENS}
+}}
+
+/* Dark tokens for system dark mode. */
+@media (prefers-color-scheme: dark) {{
+  #vp-root {{
+{_DARK_TOKENS}
+  }}
+}}
+
+#vp-root h1 {{
+  margin: 0 0 16px;
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--vp-ink);
+}}
+
+@media (min-width: 1024px) {{
+  #vp-root h1 {{
+    font-size: 34px;
+  }}
+}}
+
+/* Header bar. */
+#vp-root .vp-header {{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  background: var(--vp-primary);
+  color: var(--vp-on-primary);
+  padding: 8px 16px;
+}}
+
+.dark #vp-root .vp-header {{
+  background: var(--vp-surface);
+  color: var(--vp-ink);
+}}
+
+#vp-root .vp-brand {{
+  font-size: 24px;
+  font-weight: 800;
+  color: inherit;
+}}
+
+/* The Start over link sits on the header background, so it takes the
+   on-primary colour instead of the usual primary text colour. */
+#vp-root .vp-header .vp-btn-link {{
+  color: var(--vp-on-primary);
+}}
+
+.dark #vp-root .vp-header .vp-btn-link {{
+  color: var(--vp-primary);
+}}
+
+/* Buttons. */
+#vp-root .vp-btn {{
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 52px;
+  padding: 0 24px;
+  border: 0;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  text-decoration: none;
+}}
+
+#vp-root .vp-btn-primary {{
+  background: var(--vp-primary);
+  color: var(--vp-on-primary);
+  box-shadow: 0 4px 0 var(--vp-pressed-edge);
+}}
+
+#vp-root .vp-btn-primary:active {{
+  transform: translateY(2px);
+  box-shadow: none;
+}}
+
+#vp-root .vp-btn-secondary {{
+  background: var(--vp-surface);
+  color: var(--vp-primary);
+  border: 2px solid var(--vp-primary);
+}}
+
+#vp-root .vp-btn-link {{
+  background: none;
+  color: var(--vp-primary);
+  height: auto;
+  min-height: 44px;
+  padding: 0 8px;
+  border-radius: 0;
+  text-decoration: underline;
+  box-shadow: none;
+}}
+
+/* Focus on every button, input, chip and link. */
+#vp-root a:focus,
+#vp-root button:focus,
+#vp-root input:focus,
+#vp-root textarea:focus,
+#vp-root select:focus,
+#vp-root .vp-chip:focus {{
+  outline: 4px solid var(--vp-focus);
+  box-shadow: inset 0 0 0 2px var(--vp-ink);
+}}
+
+#vp-root .vp-btn-primary:focus {{
+  box-shadow: 0 4px 0 var(--vp-pressed-edge), inset 0 0 0 2px var(--vp-ink);
+}}
+
+/* Visually hidden but readable by screen readers. */
+.vp-sr-only {{
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}}
+
+/* Alert area and care cards. */
+#vp-root .vp-alerts {{
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px 16px 0;
+}}
+
+#vp-root .vp-card {{
+  background: var(--vp-surface);
+  color: var(--vp-ink);
+}}
+
+#vp-root .vp-card-urgent {{
+  border: 2px solid var(--vp-urgent-card-border);
+}}
+
+#vp-root .vp-card-attention {{
+  border: 2px solid var(--vp-attn-band);
+}}
+
+#vp-root .vp-card-band {{
+  padding: 12px 16px;
+}}
+
+#vp-root .vp-band-urgent {{
+  background: var(--vp-urgent-band);
+  color: var(--vp-urgent-band-text);
+}}
+
+#vp-root .vp-band-attention {{
+  background: var(--vp-attn-band);
+  color: var(--vp-attn-band-text);
+}}
+
+#vp-root .vp-card-heading {{
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  color: inherit;
+}}
+
+#vp-root .vp-card-body {{
+  padding: 16px;
+  font-size: 17px;
+  color: var(--vp-ink);
+}}
+
+/* Errors: surface with a hairline-weight border, never urgent red. */
+#vp-root .vp-error {{
+  background: var(--vp-surface);
+  color: var(--vp-ink);
+  border: 2px solid var(--vp-ink-2);
+  padding: 16px;
+}}
+
+#vp-root .vp-error p {{
+  margin: 0;
+  font-size: 17px;
+  color: var(--vp-ink);
+}}
+
+/* Preview banner. */
+#vp-root .vp-preview-banner {{
+  background: var(--vp-tint);
+  color: var(--vp-on-tint);
+  padding: 8px 16px;
+  font-size: 15px;
+}}
+
+/* Step line and progress bar. */
+#vp-root .vp-step {{
+  padding: 16px 0 0;
+}}
+
+#vp-root .vp-step-title {{
+  margin: 0 0 8px;
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--vp-ink);
+}}
+
+#vp-root .vp-progress {{
+  display: flex;
+  gap: 8px;
+}}
+
+#vp-root .vp-progress-seg {{
+  flex: 1 1 0;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--vp-hairline);
+  color: var(--vp-ink);
+}}
+
+#vp-root .vp-progress-seg.is-done,
+#vp-root .vp-progress-seg.is-current {{
+  background: var(--vp-primary);
+  color: var(--vp-ink);
+}}
+
+/* Desktop layout: 250px progress rail on the left, content on the
+   right. One column below 1024px with the rail hidden. */
+#vp-root #vp-main {{
+  display: flex;
+  align-items: flex-start;
+  gap: 24px;
+  width: 100%;
+  padding: 16px;
+  background: var(--vp-ground);
+  color: var(--vp-ink);
+}}
+
+#vp-root #vp-rail {{
+  display: none;
+  min-width: 0;
+  background: var(--vp-ground);
+  color: var(--vp-ink-2);
+}}
+
+#vp-root #vp-content {{
+  flex: 1 1 0;
+  min-width: 0;
+}}
+
+@media (min-width: 1024px) {{
+  /* !important is required: gradio's svelte column styles set
+     flex-grow and min-width and beat plain ID rules. */
+  #vp-root #vp-rail {{
+    display: block !important;
+    flex: 0 0 250px !important;
+    width: 250px !important;
+    min-width: 0 !important;
+  }}
+
+  #vp-root .vp-rail-item {{
+    display: block;
+    padding: 12px 16px;
+    font-size: 17px;
+    color: var(--vp-ink-2);
+  }}
+
+  #vp-root .vp-rail-item.is-current {{
+    background: var(--vp-tint);
+    color: var(--vp-on-tint);
+    border-left: 3px solid var(--vp-primary);
+    font-weight: 600;
+  }}
+}}
+
+/* Footer helper text. */
+#vp-root .vp-footer {{
+  background: var(--vp-ground);
+  color: var(--vp-ink-2);
+  padding: 16px;
+  font-size: 15px;
+}}
+
+#vp-root .vp-footer p {{
+  margin: 0 0 8px;
+  color: var(--vp-ink-2);
+}}
+
+#vp-root .vp-footer p:last-child {{
+  margin-bottom: 0;
+}}
+"""
