@@ -2,8 +2,10 @@
 
 Every colour is defined once as a CSS custom property on #vp-root with
 light values, and overridden for dark mode under .dark #vp-root (Gradio
-adds the dark class to the body) and inside @media (prefers-color-scheme:
-dark). No hex values may appear outside the token blocks.
+adds the dark class to the page when the theme is dark). Dark tokens
+come only from the .dark class. The ground and ink tokens are also
+defined on :root (light) and .dark (dark) so the page body can use
+them. No hex values may appear outside the token blocks.
 
 THEME_CSS is passed to launch(css=...) and THEME_HEAD to launch(head=...)
 in gradio 6.31.0 (css/head moved from the Blocks constructor to launch
@@ -68,18 +70,41 @@ THEME_CSS = f"""
   line-height: 1.5;
   width: 100%;
   min-height: 100vh;
+  gap: 0 !important;
 }}
 
-/* Dark tokens when Gradio marks the body as dark. */
+/* Dark tokens when Gradio marks the page as dark. Dark tokens come
+   only from the .dark class. */
 .dark #vp-root {{
 {_DARK_TOKENS}
 }}
 
-/* Dark tokens for system dark mode. */
-@media (prefers-color-scheme: dark) {{
-  #vp-root {{
-{_DARK_TOKENS}
-  }}
+/* Ground and ink on :root and .dark so the page body can use them
+   outside #vp-root. */
+:root {{
+  --vp-ground: #EEF4F2;
+  --vp-ink: #15232A;
+}}
+
+.dark {{
+  --vp-ground: #0E1A1C;
+  --vp-ink: #E3EEEC;
+}}
+
+/* Full-bleed page: remove gradio's page padding so #vp-root spans the
+   viewport, and give the page body the ground colour in both modes. */
+.gradio-container .main {{
+  padding: 0 !important;
+}}
+
+body {{
+  background: var(--vp-ground);
+  color: var(--vp-ink);
+}}
+
+/* Zero the default padding inside every gr.HTML wrapper in the shell. */
+#vp-root .html-container {{
+  padding: 0 !important;
 }}
 
 #vp-root h1 {{
@@ -172,6 +197,30 @@ THEME_CSS = f"""
   box-shadow: none;
 }}
 
+/* "Call 119": button-style link inside the urgent card body. */
+#vp-root .vp-btn-call {{
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 52px;
+  margin-top: 16px;
+  border-radius: 8px;
+  background: var(--vp-urgent-band);
+  color: var(--vp-urgent-band-text);
+  font-family: inherit;
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1;
+  text-decoration: none;
+}}
+
+@media (min-width: 1024px) {{
+  #vp-root .vp-btn-call {{
+    width: auto;
+  }}
+}}
+
 /* Focus on every button, input, chip and link. */
 #vp-root a:focus,
 #vp-root button:focus,
@@ -205,7 +254,18 @@ THEME_CSS = f"""
   display: flex;
   flex-direction: column;
   gap: 16px;
-  padding: 16px 16px 0;
+  padding: 16px 16px;
+}}
+
+/* The always-rendered alert area takes no space when empty. */
+#vp-root .vp-alerts.vp-alerts-empty {{
+  padding: 0;
+}}
+
+@media (min-width: 1024px) {{
+  #vp-root .vp-alerts {{
+    padding: 16px 24px;
+  }}
 }}
 
 #vp-root .vp-card {{
@@ -272,7 +332,7 @@ THEME_CSS = f"""
 
 /* Step line and progress bar. */
 #vp-root .vp-step {{
-  padding: 16px 0 0;
+  padding: 8px 0 0;
 }}
 
 #vp-root .vp-step-title {{
@@ -308,9 +368,15 @@ THEME_CSS = f"""
   align-items: flex-start;
   gap: 24px;
   width: 100%;
-  padding: 16px;
+  padding: 8px 16px 16px;
   background: var(--vp-ground);
   color: var(--vp-ink);
+}}
+
+@media (min-width: 1024px) {{
+  #vp-root #vp-main {{
+    padding: 8px 24px 16px;
+  }}
 }}
 
 #vp-root #vp-rail {{
@@ -354,8 +420,14 @@ THEME_CSS = f"""
 #vp-root .vp-footer {{
   background: var(--vp-ground);
   color: var(--vp-ink-2);
-  padding: 16px;
+  padding: 16px 16px;
   font-size: 15px;
+}}
+
+@media (min-width: 1024px) {{
+  #vp-root .vp-footer {{
+    padding: 16px 24px;
+  }}
 }}
 
 #vp-root .vp-footer p {{
