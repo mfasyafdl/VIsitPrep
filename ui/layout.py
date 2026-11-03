@@ -6,6 +6,7 @@ ui/components.py; all session logic lives in ui/handlers.py. No
 business logic here.
 """
 
+import datetime
 from functools import partial
 
 import gradio as gr
@@ -29,7 +30,10 @@ from ui.components import (
     progress_html,
     question_heading_html,
     question_text_html,
+    questions_html,
     rail_html,
+    script_html,
+    visit_note_html,
 )
 from ui.state import new_state
 
@@ -39,6 +43,17 @@ STEP_3 = 3
 STEP_4 = 4
 
 WORKING_LABEL = "Working… this can take up to a minute"
+SUMMARY_WORKING_LABEL = "Writing your note… this can take up to a minute"
+
+COPY_SCRIPT_JS = (
+    "() => { const el = document.querySelector('#vp-script-text'); "
+    "const b = document.querySelector('#vp-copy-script'); "
+    "if (!el || !b) return; "
+    "navigator.clipboard.writeText(el.innerText).then(() => { "
+    "b.textContent = 'Copied'; "
+    "setTimeout(() => { b.textContent = 'Copy what to say'; }, 2000); "
+    "}, () => { b.textContent = 'Select the text to copy'; }); }"
+)
 
 SEVERITY_CHOICES = (
     ("Mild", "mild"),
@@ -143,6 +158,25 @@ def _step3_values(state: dict) -> list:
     return values
 
 
+def _step4_values(state: dict) -> list:
+    """The step 4 outputs: the note, the script, the questions."""
+    summary = state["summary"]
+    if summary is None:
+        return ["", "", ""]
+    return [
+        visit_note_html(summary, datetime.date.today()),
+        script_html(summary),
+        questions_html(summary),
+    ]
+
+
+def _summary_button_update(state: dict):
+    """The Write my summary button: interactive only on merged step 3."""
+    if state["step"] == STEP_3 and state["merged"] is True:
+        return gr.update(interactive=True, value="Write my summary")
+    return gr.update(interactive=False, value="Write my summary")
+
+
 def _render(state: dict) -> list:
     """Map the state dict to the values of render_outputs."""
     step = state["step"]
@@ -162,7 +196,7 @@ def _render(state: dict) -> list:
         _question_text(state),
         answers_list_html(state["asked"]),
         gr.update(label=f"Your answers so far ({len(state['asked'])})"),
-    ] + _step3_values(state)
+    ] + _step3_values(state) + _step4_values(state) + [_summary_button_update(state)]
 
 
 def _answer_box_value(state: dict):
@@ -197,6 +231,26 @@ def _enable_step1(state: dict) -> list:
     )
 
 
+def _disable_summarize() -> list:
+    """The instant step before on_summarize: working label plus the
+    seven Change buttons made not interactive."""
+    updates = [
+        gr.update(interactive=False, value=SUMMARY_WORKING_LABEL)
+    ]
+    updates.extend(gr.update(interactive=False) for _ in DETAIL_ROWS)
+    return updates
+
+
+def _reset(state: dict) -> list:
+    """Start over: fresh state, render, and cleared step 1 inputs."""
+    fresh = handlers.on_reset(state)
+    values = [fresh] + _render(fresh)
+    values += ["", "", None, ""]
+    values += [gr.update(interactive=True) for _ in range(3)]
+    values.append(gr.update(interactive=True, value="Continue"))
+    return values
+
+
 def _open_editor(section: str, state: dict) -> dict:
     """Wire a section's Change button to open_editor."""
     return handlers.open_editor(state, section)
@@ -219,7 +273,14 @@ def build_interface() -> None:
     state = gr.State(new_state())
 
     with gr.Column(elem_id="vp-root"):
-        gr.HTML(header_html(), elem_id="vp-header")
+        with gr.Row(elem_id="vp-header", elem_classes="vp-header"):
+            gr.HTML(header_html(), scale=0)
+            start_over_btn = gr.Button(
+                "Start over",
+                elem_classes="vp-btn vp-btn-link",
+                elem_id="vp-start-over",
+                scale=0,
+            )
         if backend.PREVIEW:
             gr.HTML(preview_banner_html(), elem_id="vp-preview")
         alerts_area = gr.HTML(alerts_html([]), elem_id="vp-alerts")
@@ -451,7 +512,7 @@ def build_interface() -> None:
                             "save": save,
                             "cancel": cancel,
                         }
-                    gr.Button(
+                    summary_btn = gr.Button(
                         "Write my summary",
                         elem_classes="vp-btn vp-btn-primary",
                         interactive=False,
@@ -459,6 +520,23 @@ def build_interface() -> None:
                     )
                 with gr.Column(elem_id="vp-step-4", visible=False) as step4_col:
                     gr.Markdown(f"# {STEP_NAMES[3]}")
+                    gr.HTML('<p class="vp-helper">Show this to your doctor.</p>')
+                    with gr.Row(elem_id="vp-step4-grid"):
+                        with gr.Column():
+                            visit_note = gr.HTML("", elem_id="vp-visit-note")
+                        with gr.Column():
+                            script_block = gr.HTML("", elem_id="vp-script")
+                            copy_btn = gr.Button(
+                                "Copy what to say",
+                                elem_classes="vp-btn vp-btn-secondary",
+                                elem_id="vp-copy-script",
+                            )
+                            questions_block = gr.HTML("", elem_id="vp-questions")
+                    change_details_btn = gr.Button(
+                        "Change my details",
+                        elem_classes="vp-btn vp-btn-secondary",
+                        elem_id="vp-change-details",
+                    )
         gr.HTML(footer_html(), elem_id="vp-footer")
 
     step3_outputs = [step3_checking]
@@ -486,7 +564,7 @@ def build_interface() -> None:
         question,
         answers,
         accordion,
-    ] + step3_outputs
+    ] + step3_outputs + [visit_note, script_block, questions_block, summary_btn]
 
     chip_started.click(
         partial(handlers.append_chip, chip="It started…"),
@@ -505,15 +583,17 @@ def build_interface() -> None:
     )
 
     # Every event that can move to step 3 runs its handler, renders,
-    # then runs enter_review and renders again.
-    continue_btn.click(
+    # then runs enter_review and renders again. The steps that call the
+    # model are kept in variables so Start over can cancel them.
+    continue_model_step = continue_btn.click(
         _disable_step1,
         outputs=[chip_started, chip_feels, chip_takes, continue_btn],
     ).then(
         handlers.on_continue,
         inputs=[state, story_box, age_box, sex_radio],
         outputs=[state],
-    ).then(
+    )
+    continue_model_step.then(
         _enable_step1,
         inputs=[state],
         outputs=[chip_started, chip_feels, chip_takes, continue_btn]
@@ -528,11 +608,12 @@ def build_interface() -> None:
         outputs=render_outputs,
     )
 
-    save_btn.click(
+    save_model_step = save_btn.click(
         handlers.on_answer,
         inputs=[state, answer_box],
         outputs=[state],
-    ).then(
+    )
+    save_merge_step = save_model_step.then(
         _render_after_answer,
         inputs=[state],
         outputs=render_outputs + [answer_box],
@@ -540,17 +621,19 @@ def build_interface() -> None:
         handlers.enter_review,
         inputs=[state],
         outputs=[state],
-    ).then(
+    )
+    save_merge_step.then(
         _render,
         inputs=[state],
         outputs=render_outputs,
     )
 
-    skip_btn.click(
+    skip_model_step = skip_btn.click(
         handlers.on_skip,
         inputs=[state],
         outputs=[state],
-    ).then(
+    )
+    skip_merge_step = skip_model_step.then(
         _render_after_answer,
         inputs=[state],
         outputs=render_outputs + [answer_box],
@@ -558,13 +641,14 @@ def build_interface() -> None:
         handlers.enter_review,
         inputs=[state],
         outputs=[state],
-    ).then(
+    )
+    skip_merge_step.then(
         _render,
         inputs=[state],
         outputs=render_outputs,
     )
 
-    done_btn.click(
+    done_merge_step = done_btn.click(
         handlers.on_finish,
         inputs=[state],
         outputs=[state],
@@ -576,7 +660,8 @@ def build_interface() -> None:
         handlers.enter_review,
         inputs=[state],
         outputs=[state],
-    ).then(
+    )
+    done_merge_step.then(
         _render,
         inputs=[state],
         outputs=render_outputs,
@@ -612,3 +697,56 @@ def build_interface() -> None:
             inputs=[state],
             outputs=render_outputs,
         )
+
+    change_buttons = [
+        step3_parts[section]["change"] for section, _label in DETAIL_ROWS
+    ]
+    summarize_model_step = summary_btn.click(
+        _disable_summarize,
+        outputs=[summary_btn] + change_buttons,
+    ).then(
+        handlers.on_summarize,
+        inputs=[state],
+        outputs=[state],
+    )
+    summarize_model_step.then(
+        _render,
+        inputs=[state],
+        outputs=render_outputs,
+    )
+
+    copy_btn.click(fn=None, js=COPY_SCRIPT_JS)
+
+    change_details_btn.click(
+        handlers.on_change_details,
+        inputs=[state],
+        outputs=[state],
+    ).then(
+        _render,
+        inputs=[state],
+        outputs=render_outputs,
+    )
+
+    start_over_btn.click(
+        _reset,
+        inputs=[state],
+        outputs=[state]
+        + render_outputs
+        + [
+            story_box,
+            age_box,
+            sex_radio,
+            answer_box,
+            chip_started,
+            chip_feels,
+            chip_takes,
+            continue_btn,
+        ],
+        cancels=[
+            continue_model_step,
+            save_merge_step,
+            skip_merge_step,
+            done_merge_step,
+            summarize_model_step,
+        ],
+    )

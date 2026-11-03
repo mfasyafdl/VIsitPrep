@@ -617,4 +617,129 @@ body {{
 #vp-root .vp-editor-actions {{
   justify-content: flex-end;
 }}
+
+/* Step 4: the visit note slip. */
+#vp-root .vp-note {{
+  background: var(--vp-surface);
+  color: var(--vp-ink);
+  border-top: 6px solid var(--vp-primary);
+  border-radius: 8px;
+  padding: 16px;
+}}
+
+#vp-root .vp-note-head {{
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 0 0 16px;
+}}
+
+#vp-root .vp-note-title {{
+  margin: 0;
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--vp-ink);
+}}
+
+#vp-root .vp-note-date {{
+  font-size: 15px;
+  color: var(--vp-ink-2);
+}}
+
+#vp-root .vp-stamp {{
+  display: inline-block;
+  border: 2px solid var(--vp-primary);
+  color: var(--vp-primary);
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transform: rotate(-4deg);
+  margin: 0 0 16px;
+}}
+
+#vp-root .vp-perforation {{
+  border-top: 2px dashed var(--vp-hairline);
+  margin: 0 0 16px;
+}}
+
+#vp-root .vp-note-row {{
+  margin: 0 0 4px;
+  font-size: 17px;
+  color: var(--vp-ink);
+  overflow-wrap: break-word;
+}}
+
+#vp-root .vp-note-row strong {{
+  font-weight: 700;
+  color: var(--vp-ink);
+}}
+
+#vp-root .vp-note .vp-helper {{
+  margin: 16px 0 0;
+}}
+
+/* Step 4: the script and the questions. */
+#vp-root .vp-script-heading,
+#vp-root .vp-questions-heading {{
+  margin: 0 0 8px;
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--vp-ink);
+}}
+
+#vp-root #vp-script-text {{
+  margin: 0 0 8px;
+  font-size: 17px;
+  color: var(--vp-ink);
+  overflow-wrap: break-word;
+}}
+
+#vp-root .vp-questions {{
+  margin: 0 0 16px;
+  padding-left: 22px;
+  font-size: 17px;
+  color: var(--vp-ink);
+}}
+
+#vp-root .vp-questions li {{
+  margin: 0 0 4px;
+  color: var(--vp-ink);
+}}
+
+#vp-root .vp-questions li:last-child {{
+  margin-bottom: 0;
+}}
+
+/* Step 4: the two columns stack below 1024px (note first) and sit
+   side by side from 1024px. */
+#vp-root #vp-step4-grid {{
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  background: var(--vp-ground);
+  color: var(--vp-ink);
+}}
+
+#vp-root #vp-step4-grid .column {{
+  min-width: 0;
+  background: var(--vp-ground);
+  color: var(--vp-ink);
+}}
+
+@media (min-width: 1024px) {{
+  #vp-root #vp-step4-grid {{
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 24px;
+  }}
+
+  #vp-root #vp-step4-grid .column {{
+    flex: 1 1 0 !important;
+    min-width: 0 !important;
+  }}
+}}
 """

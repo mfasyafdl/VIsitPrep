@@ -556,3 +556,154 @@ AC1. `python -m pytest -q` passes; report the count.
 AC2. Manual with VISITPREP_PREVIEW=1 on port 7861 at 375px: child_cough story → Continue → "I'm done, check my details" → Change on Allergies → type "peanuts", tick "No allergies", Save. Report the textbox content and the tick state after the error (must still be "peanuts" and ticked). Untick, Save, report the Allergies row (must show peanuts).
 AC3. `git status --short` shows only files from "Files you may change".
 ```
+
+## P2-3b
+
+- Model: Qwen/Qwen3.8-27B
+- Date: 2026-11-03
+
+### Prompt (verbatim)
+
+```
+ROLE: You are the coding agent for Person 2 of VisitPrep, a new Python 3.10 + Gradio app, English only, that helps a patient prepare for a doctor visit. It organizes what the patient reports. It never diagnoses, never recommends treatment or medication changes.
+
+TEAM: Two people build this in parallel. Person 2 (you) owns app.py, ui/, tests/test_ui/, docs/deployment.md and docs/prompt_log_person2.md. Person 1 owns AGENTS.md, requirements*.txt, .gitignore, .env.example, docs/data_contract.md, core/, tests/test_core/, README.md and scripts/. Never edit Person 1's files, even to fix a bug; write a handoff with an exact reproduction instead. If you need a new dependency, ask for it in the handoff.
+
+BEFORE YOU WRITE CODE:
+1. Read AGENTS.md and docs/data_contract.md in full. Then read only the files listed under "Files to read" in the task.
+2. Write a short plan: the files you will change and one line per file on what changes. Then continue; do not wait for approval unless a rule below says stop.
+
+HARD RULES (breaking any of these means the task failed):
+- Only edit files listed under "Files you may change".
+- ui/ has no business logic. Alerts come only from core.redflag. Questions come only from core.interview. Summaries come only from core.summarize. Never reimplement any of them, and never write red-flag trigger words in ui/.
+- Event handlers live in ui/handlers.py as plain functions that take the session state dict plus inputs and return a new state dict; they never import gradio. ui/layout.py only builds components and wires events to those functions.
+- null means unknown. Never turn null into False, 0, "" or "none".
+- Escape every piece of patient text before it goes into gr.HTML or the PDF.
+- No catch-all `except Exception` that hides a failure. Show a visible English message instead.
+- Never print, log or hard-code MODELSCOPE_API_KEY. Tests never use the network.
+- Do not commit, push, merge or change git config. Do not touch any app I am running on port 7860; if you launch the app, use port 7861.
+- All user-facing text is English.
+
+WORK STYLE:
+- Do the steps in order. If one is impossible, say why in the report and continue with the next.
+- Make the smallest change that meets the acceptance criteria. No unrelated refactors.
+- After each file change, run `python -m pytest -q tests/test_ui` and fix failures before moving on. If the same command fails twice for a reason you cannot fix, stop and report the full error.
+- If something is ambiguous, ask me one specific question and stop.
+
+FINAL REPORT (use exactly these headings):
+## Plan vs done
+One line per planned item: DONE / PARTLY / NOT DONE, with file and function.
+## Acceptance criteria
+One line per criterion: PASS / FAIL / NOT RUN, with evidence (the command and the relevant output line, or what you saw).
+## Test results
+The exact last line of `python -m pytest -q`, with totals for tests/test_core and tests/test_ui.
+## Not verified
+Anything you did not check, and why. Never write "should work". If you did not run it, write NOT RUN.
+## Handoff for Person 1
+Exact reproductions or requests (file, function, input, expected, actual), or "None".
+## prompt_log
+Confirm you appended this whole prompt verbatim (Block A2, any extra block, and the task card, exactly as pasted) to docs/prompt_log_person2.md under the section id in the task title, with the model name "Qwen/Qwen3.8-27B", and that earlier sections are unchanged.
+
+DESIGN RULES v2 (exact values from the approved UI preview; do not invent other colours or sizes):
+
+Colour tokens: define each once as a CSS custom property on #vp-root (light values), and override them under `.dark #vp-root` (Gradio's dark class). Dark tokens come ONLY from the .dark class; never add a @media (prefers-color-scheme) block (Gradio already sets .dark in system mode, and the media block breaks ?__theme=light). --vp-ground and --vp-ink are also defined on :root and .dark so the page body uses the ground colour. No hard-coded hex anywhere else. Every rule that sets a background also sets color.
+  token                    light      dark
+  --vp-ground              #EEF4F2    #0E1A1C
+  --vp-surface             #FFFFFF    #16252A
+  --vp-ink                 #15232A    #E3EEEC
+  --vp-ink-2               #44565E    #AFC2C1
+  --vp-primary             #0B6B60    #4FC1B1
+  --vp-on-primary          #FFFFFF    #052421
+  --vp-pressed-edge        #06443D    #2E8C80
+  --vp-tint                #DCEEEA    #1D3A3A
+  --vp-on-tint             #0B4F47    #BDEDE5
+  --vp-input-border        #6B7F84    #6F8A8D   (2px)
+  --vp-hairline            #D3E0DD    #27393D
+  --vp-urgent-band         #C42B1C    #C42B1C   (band text #FFFFFF in both)
+  --vp-urgent-card-border  #C42B1C    #FF8A7A
+  --vp-attn-band           #FFD84D    #FFD84D   (band text #15232A in both)
+  Focus on every button, input, chip and link: outline 4px solid #FFD84D plus an inner 2px edge in --vp-ink (box-shadow inset).
+  Header bar: --vp-primary background with --vp-on-primary text in light mode; --vp-surface with --vp-ink text in dark mode.
+
+Type: "Atkinson Hyperlegible Next" from Google Fonts (weights 400, 600, 700, 800), fallback system-ui, sans-serif. Body 17px, helper text 15px, h1 26px below 1024px and 34px from 1024px. Inputs at least 17px.
+
+Buttons: 52px tall, radius 8px. Primary: filled --vp-primary, text --vp-on-primary, 4px bottom edge in --vp-pressed-edge (box-shadow 0 4px 0) that disappears while pressed (translateY 2px). Secondary: --vp-surface background, 2px --vp-primary border, --vp-primary text. Link-style: no background, underlined --vp-primary text, at least 44px tall. Exactly one primary button per step.
+
+Alerts are care cards: a coloured band whose heading names the action, then a body on --vp-surface.
+  Urgent: band --vp-urgent-band, an h2 heading "Get medical help now" that starts with a visually hidden "Urgent advice:" (class vp-sr-only). Card border 2px --vp-urgent-card-border. Body = core's alert message verbatim, escaped. Exactly one "Call 119" link with href="tel:119" styled as a button (class vp-btn-call: --vp-urgent-band background, white text, 52px, radius 8px, full width below 1024px) inside the card body.
+  Attention: band --vp-attn-band, heading "Tell your doctor about this", hidden "Attention:", body verbatim, no call button.
+  Container: always rendered; role="alert" when any urgent alert is present, otherwise aria-live="polite". With no alerts it is an empty container with no height and never says "no alerts" or "you are safe".
+
+Errors use --vp-surface with a 2px --vp-ink-2 border, never urgent red.
+
+Page order on every step: header bar (brand "VisitPrep" left, "Start over" link-style right) → alert area → "**Step N of 4**, <label>" with a 4-segment progress bar (labels: describe your symptoms / a few questions / check your details / your summary) → step content → action buttons → footer.
+Full-bleed page: no Gradio padding around #vp-root; 16px side padding below 1024px, 24px from 1024px.
+Footer text: "Before you type: your notes are sent to ModelScope to be organized. Leave out your name, address and phone number. The provider doesn't promise to delete them, and closing this tab doesn't delete them right away." then "VisitPrep doesn't diagnose, give medical advice or suggest treatment."
+Desktop from 1024px: a 250px progress rail on the left (current step: --vp-tint background, 3px --vp-primary left border, aria-current="step") and the content on the right. Below 1024px: one column, rail hidden. Rail labels: Describe / Questions / Check details / Your summary.
+ui/theme.py and ui/components.py already implement all of the above (merged in P2-1 and P2-1-FIX-1). Reuse their classes and functions; do not rewrite or duplicate the theme.
+
+TASK P2-3b — "Write my summary", step 4 visit note, "Change my details" and a working "Start over". Log section: P2-3b.
+
+Files to read: AGENTS.md, docs/data_contract.md, core/schema.py (SummaryOutput, read only), ui/state.py, ui/backend.py, ui/handlers.py, ui/components.py, ui/layout.py, ui/theme.py, tests/test_ui/test_handlers_steps34.py, tests/test_ui/test_components.py.
+Files you may change: ui/handlers.py, ui/components.py, ui/layout.py, ui/theme.py (only to add classes for the new parts), tests/test_ui/test_handlers_step4.py (new), tests/test_ui/test_components.py, docs/prompt_log_person2.md.
+
+Facts about the current code (checked on main 752bb2b, 427 tests pass):
+- core.summarize.generate_summary works in real mode now (P1-6); ui/backend.py already has summarize(record, asked, story) -> SummaryOutput (preview: the fixture's summary). Do not change ui/backend.py or ui/state.py.
+- SummaryOutput has doctor_card (str, one "Label: value" per line), patient_script (str) and priority_questions (list[str]).
+- The state already has summary=None and pdf_path=None. save_section already clears both.
+- The header's "Start over" is an <a href="#"> inside header_html and does nothing.
+- STEP_NAMES[3] is "Your visit note is ready". The step 4 column exists with only its heading.
+- The PDF is task P2-4. Do not build it, and do not add a download button.
+
+Steps:
+1. ui/handlers.py, plain functions (no gradio), same rules as before: return a NEW state dict, never mutate the input, return the state unchanged when called from the wrong step.
+   a. on_summarize(state): only when step == 3 and merged is True, otherwise unchanged. When editing is not None: error "Save or cancel your change first." and do not call the backend. Otherwise call backend.summarize(record_from_dict(record), [QuestionAnswer(**qa) for qa in asked], story) exactly once.
+      Success: summary = {"doctor_card", "patient_script", "priority_questions"} (plain dict, a new list for the questions), step 4, error None.
+      LLMError: stay on step 3, summary None, error = str(err) + " Your details are kept. Press Write my summary to try again."
+      NotImplementedError: stay on step 3, error = _NOT_READY.
+      Always bump the token.
+   b. on_change_details(state): only when step == 4. Step 3, summary None, pdf_path None, editing None, error None; merged stays True, so the merge does not run again.
+   c. on_reset(state): returns new_state(), from any step.
+2. ui/components.py (every patient value through html.escape, as before):
+   a. header_html(): the brand only (<span class="vp-brand">VisitPrep</span>), no link. The Start over control becomes a real button in ui/layout.py.
+   b. note_date(d: datetime.date) -> str: "3 November 2026" (day without a leading zero, full month name, year).
+   c. visit_note_html(summary: dict, prepared_on: datetime.date) -> str: a slip (class vp-note: --vp-surface background, --vp-ink text, 6px --vp-primary top border, radius 8px, 16px padding) with the title "Visit note" and note_date(prepared_on) on one line; a stamp "For the doctor" (class vp-stamp: 2px --vp-primary border, --vp-primary text, uppercase 13px, rotated -4deg, inline-block); a dashed 2px --vp-hairline line (class vp-perforation); then one row per doctor_card line, split on the FIRST ": " into a bold label and the value (a line without ": " is shown whole); then the line "Written by the patient with VisitPrep. Not a diagnosis." (class vp-helper).
+   d. read_time_seconds(script: str) -> int: round(len(script.split()) / 150 * 60).
+   e. script_html(summary: dict) -> str: an h2 "What to say", the script in <p id="vp-script-text">, then "About N seconds when read aloud" (class vp-helper) only when N > 0.
+   f. questions_html(summary: dict) -> str: an h2 "Questions to ask" and an <ol> with one <li> per question; "" when the list is empty.
+3. ui/layout.py (wiring only):
+   a. Header: replace the header gr.HTML with gr.Row(elem_id="vp-header", elem_classes="vp-header") holding gr.HTML(header_html()) and gr.Button("Start over", elem_classes="vp-btn vp-btn-link", elem_id="vp-start-over"), both scale=0 so the row stays on one line at 375px with the brand left and the button right. Keep the existing header colours in light and dark mode.
+   b. Step 3: the "Write my summary" button (primary, elem_id vp-step3-summary) becomes interactive when step == 3 and merged is True. Pressing it: first an instant step that sets it to interactive=False with the label "Writing your note… this can take up to a minute" and makes every step 3 Change button not interactive; then on_summarize; then render, which restores the label "Write my summary" and the buttons.
+   c. Step 4 (inside the existing step 4 column, below the h1): the line "Show this to your doctor." (vp-helper); then gr.Row(elem_id="vp-step4-grid") with a left gr.Column holding gr.HTML visit note (elem_id vp-visit-note), and a right gr.Column holding gr.HTML script (elem_id vp-script), a secondary gr.Button "Copy what to say" (elem_id vp-copy-script) and gr.HTML questions (elem_id vp-questions). Below 1024px the two columns stack (note first) at full width; from 1024px they sit side by side. Then the secondary button "Change my details" (elem_id vp-change-details). No primary button on step 4 until task P2-4 adds "Download PDF"; this is the only exception to "exactly one primary button per step".
+   d. Render: when summary is not None the three gr.HTML get visit_note_html(summary, datetime.date.today()), script_html(summary) and questions_html(summary); otherwise "".
+   e. Copy: "Copy what to say".click(fn=None, js=...) with this exact JavaScript (no Python call):
+      () => { const el = document.querySelector('#vp-script-text'); const b = document.querySelector('#vp-copy-script'); if (!el || !b) return; navigator.clipboard.writeText(el.innerText).then(() => { b.textContent = 'Copied'; setTimeout(() => { b.textContent = 'Copy what to say'; }, 2000); }, () => { b.textContent = 'Select the text to copy'; }); }
+   f. "Change my details": on_change_details, then render.
+   g. Start over: on_reset, then render, and in the same handler also clear the story box, the age box, the sex radio (None) and the answer box, and set the three chips and Continue to interactive with the label "Continue". Pass cancels= with the event objects of every step that calls the model: the .then(handlers.on_continue, ...) step, the three .then(handlers.enter_review, ...) steps (after Save answer, Skip this question and I'm done) and the .then(handlers.on_summarize, ...) step. Keep each of those steps in a variable and chain the next .then from it. Tested with Gradio 6.31.0: cancelling a step drops its output, and the later .then steps of that chain still run with the fresh state, which is harmless because enter_review and on_summarize do nothing on step 1.
+4. tests/test_ui/test_handlers_step4.py (fake backend with monkeypatch; neutral fictional data):
+   - on_summarize calls backend.summarize exactly once with a PatientRecord, a list of QuestionAnswer and the story; it stores the summary dict and goes to step 4;
+   - with an open editor: the exact error, the backend is not called, step stays 3;
+   - merged False, or step 2 or 4: state unchanged;
+   - LLMNetworkError: step 3, summary None, error ends "Press Write my summary to try again.", record unchanged;
+   - NotImplementedError: _NOT_READY on step 3;
+   - on_change_details: step 3, summary None, pdf_path None, merged True; on step 3 it does nothing;
+   - on_reset from steps 1, 2, 3 and 4 equals new_state();
+   - no handler mutates its input (compare a deepcopy).
+5. tests/test_ui/test_components.py (keep every test; in test_header_and_footer_text replace the "Start over" assertion with: 'href="#"' not in header_html()):
+   - note_date: date(2026, 11, 3) → "3 November 2026"; date(2027, 1, 12) → "12 January 2027";
+   - visit_note_html, script_html and questions_html escape "<img src=x onerror=alert(1)>" in the doctor card, the script and a question;
+   - visit_note_html contains "Visit note", "For the doctor", the date, the bold label "Patient" for the line "Patient: 7 years old", and "Written by the patient with VisitPrep. Not a diagnosis.";
+   - read_time_seconds: 150 words → 60, 35 words → 14, "" → 0; script_html has no "seconds when read aloud" for an empty script;
+   - questions_html with two questions has one <ol> and two <li>; with no questions it returns "".
+6. Append this prompt verbatim to docs/prompt_log_person2.md as section "## P2-3b" with the line "Model: Qwen/Qwen3.8-27B", inside a ``` code block. Do not change earlier sections.
+
+Acceptance criteria:
+AC1. `python -m pytest -q` passes; report the count and the tests/test_ui count.
+AC2. `grep -rn -i "breath\|chest\|faint\|seizure" ui/` is empty.
+AC3. Manual with VISITPREP_PREVIEW=1 on port 7861 at 375px: paste the child_cough example story, Continue, press "I'm done, check my details", then "Write my summary". Report: the "Step N of 4" line, the visit note title line with its date, the first two doctor card lines, the read-time line, the number of questions, the number of primary buttons on step 4 (must be 0), and document.documentElement.scrollWidth (must be 375).
+AC4. Same story at 1280px: report the x position of #vp-visit-note and #vp-script (the note must be left of the script) and scrollWidth (must be 1280). Repeat at 1280px with ?__theme=dark and report whether the note, the stamp and the header are readable.
+AC5. With clipboard permission (or by hand in Chrome): press "Copy what to say". Report the button text right after (must be "Copied") and whether the clipboard equals the script.
+AC6. "Change my details" → report the step line and whether the seven rows show; then "Write my summary" again → step 4.
+AC7. "Start over" on step 4 → report the step line and the story box content (must be "Step 1 of 4" and empty). Then paste the chest_pain example story and press Continue (an urgent alert shows), press "Start over" again and report whether the alert area is empty. At 375px report whether the header (brand and Start over) is on one line.
+AC8. `git status --short` shows only files from "Files you may change".
+```

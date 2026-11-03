@@ -24,7 +24,7 @@ from core.schema import (
 )
 
 import ui.backend as backend
-from ui.state import bump
+from ui.state import bump, new_state
 
 _MAX_QUESTIONS = 5
 
@@ -465,6 +465,58 @@ def save_section(state: dict, section: str, values: dict) -> dict:
     result["pdf_path"] = None
     result = recompute_alerts(result)
     return bump(result)
+
+
+def on_summarize(state: dict) -> dict:
+    """Step 3: generate the visit note, exactly once."""
+    if state["step"] != 3 or not state["merged"]:
+        return state
+    if state["editing"] is not None:
+        result = dict(state)
+        result["error"] = "Save or cancel your change first."
+        return bump(result)
+    result = dict(state)
+    try:
+        summary = backend.summarize(
+            record_from_dict(state["record"]),
+            [QuestionAnswer(**qa) for qa in state["asked"]],
+            state["story"],
+        )
+    except LLMError as err:
+        result["error"] = (
+            str(err)
+            + " Your details are kept. Press Write my summary to try again."
+        )
+        return bump(result)
+    except NotImplementedError:
+        result["error"] = _NOT_READY
+        return bump(result)
+    result["summary"] = {
+        "doctor_card": summary.doctor_card,
+        "patient_script": summary.patient_script,
+        "priority_questions": list(summary.priority_questions),
+    }
+    result["error"] = None
+    result["step"] = 4
+    return bump(result)
+
+
+def on_change_details(state: dict) -> dict:
+    """Step 4: go back to step 3 without running the merge again."""
+    if state["step"] != 4:
+        return state
+    result = dict(state)
+    result["step"] = 3
+    result["summary"] = None
+    result["pdf_path"] = None
+    result["editing"] = None
+    result["error"] = None
+    return bump(result)
+
+
+def on_reset(state: dict) -> dict:
+    """Any step: a fresh session state."""
+    return new_state()
 
 
 def append_chip(text: str, chip: str) -> str:
