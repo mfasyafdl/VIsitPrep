@@ -122,8 +122,12 @@ def _normalize_medicine(item: object, index: int, problems: list[str]) -> dict |
     if not name:
         return None
     medicine_type = item.get("medicine_type")
-    if not isinstance(medicine_type, str) or medicine_type not in MEDICINE_TYPES:
+    if not isinstance(medicine_type, str):
         medicine_type = "unknown"
+    else:
+        medicine_type = medicine_type.strip().lower().replace(" ", "-")
+        if medicine_type not in MEDICINE_TYPES:
+            medicine_type = "unknown"
     medicine = {
         "name": name,
         "medicine_type": medicine_type,

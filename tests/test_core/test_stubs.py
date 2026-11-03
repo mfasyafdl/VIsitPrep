@@ -2,14 +2,10 @@
 
 import pytest
 
-from core import interview, llm, summarize
+from core import llm, summarize
 from core.schema import empty_record
 
 STUB_CALLS = [
-    pytest.param(
-        lambda: interview.merge_answers(empty_record(), []),
-        id="interview.merge_answers",
-    ),
     pytest.param(
         lambda: summarize.generate_summary(empty_record(), []),
         id="summarize.generate_summary",

@@ -360,6 +360,34 @@ def test_normalize_medicine_dict_item_type_and_extra_keys():
     ]
 
 
+def test_normalize_medicine_type_is_stripped_lowercased_and_dashed():
+    normalized, problems = extract._normalize(
+        make_answer(
+            medicines=[
+                {
+                    "name": "jamu",
+                    "medicine_type": "Herbal",
+                    "dose": None,
+                    "frequency": None,
+                    "duration": None,
+                    "notes": None,
+                },
+                {
+                    "name": "paracetamol",
+                    "medicine_type": "Over the counter",
+                    "dose": None,
+                    "frequency": None,
+                    "duration": None,
+                    "notes": None,
+                },
+            ]
+        )
+    )
+    assert problems == []
+    assert normalized["medicines"][0]["medicine_type"] == "herbal"
+    assert normalized["medicines"][1]["medicine_type"] == "over-the-counter"
+
+
 def test_normalize_medicine_empty_name_is_dropped():
     normalized, problems = extract._normalize(
         make_answer(medicines=["   ", {"name": "  ", "medicine_type": "herbal"}])

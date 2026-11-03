@@ -1,7 +1,21 @@
 """Interview interface: next_question(record, asked, skipped, max_questions) picks the next rule-based question with no network call, and merge_answers(record, asked, *, config) folds all answers into a new record with one model call, per docs/data_contract.md."""
 
-from core.llm import LLMConfig
-from core.schema import PatientRecord, QuestionAnswer, missing_fields
+import json
+import re
+
+from core.extract import _normalize as _normalize_answer
+from core.llm import LLMConfig, chat_json
+from core.prompts import MERGE_SYSTEM
+from core.schema import (
+    PatientRecord,
+    QuestionAnswer,
+    SchemaError,
+    missing_fields,
+    record_from_dict,
+    record_to_dict,
+    recompute_missing_information,
+    validate_record,
+)
 
 PRIORITY_FIELDS = (
     "severity",
@@ -75,10 +89,109 @@ def next_question(
     return None
 
 
+_TAG_RE = re.compile(
+    r"<\s*/?\s*(?:current_record|patient_report)\s*>", re.IGNORECASE
+)
+
+_SCALAR_GUARD_FIELDS = (
+    "patient_age",
+    "patient_age_text",
+    "patient_sex",
+    "reporting_on_behalf",
+    "reporter_relationship",
+    "complaint",
+    "onset",
+    "duration",
+    "severity",
+    "severity_note",
+    "pregnant",
+)
+
+_LIST_GUARD_FIELDS = ("symptoms", "allergies", "medical_history", "concerns")
+
+_FLAG_GUARD_PAIRS = (
+    ("medicines_denied", "medicines"),
+    ("allergies_denied", "allergies"),
+    ("medical_history_denied", "medical_history"),
+)
+
+
+def _build_user_message(
+    record: PatientRecord, asked: list[QuestionAnswer]
+) -> str:
+    current = record_to_dict(record)
+    current.pop("missing_information")
+    record_part = (
+        "<current_record>\n"
+        + _TAG_RE.sub("", json.dumps(current, ensure_ascii=False, indent=2))
+        + "\n</current_record>"
+    )
+    blocks = [
+        "Question: "
+        + _TAG_RE.sub("", item.question)
+        + "\nAnswer: "
+        + _TAG_RE.sub("", item.answer)
+        for item in asked
+    ]
+    report_part = "<patient_report>\n" + "\n\n".join(blocks) + "\n</patient_report>"
+    return record_part + "\n\n" + report_part
+
+
+def _fact_loss_problems(
+    original: PatientRecord, updated: PatientRecord
+) -> list[str]:
+    problems: list[str] = []
+    for field in _SCALAR_GUARD_FIELDS:
+        if getattr(original, field) is None:
+            continue
+        if getattr(updated, field) is None:
+            problems.append(f"keep {field}: it was known before")
+    for field in _LIST_GUARD_FIELDS:
+        new_items = {item.strip().casefold() for item in getattr(updated, field)}
+        for item in getattr(original, field):
+            if item.strip().casefold() not in new_items:
+                problems.append(f"keep every item of {field}: missing {item}")
+    new_names = {medicine.name.strip().casefold() for medicine in updated.medicines}
+    for medicine in original.medicines:
+        if medicine.name.strip().casefold() not in new_names:
+            problems.append(f"keep every medicine: missing {medicine.name}")
+    for flag_key, list_key in _FLAG_GUARD_PAIRS:
+        if (
+            getattr(original, flag_key) is True
+            and getattr(updated, flag_key) is not True
+            and not getattr(updated, list_key)
+        ):
+            problems.append(f"keep {flag_key}: it was true before")
+    return problems
+
+
+def _validate_merge(data: dict, original: PatientRecord) -> list[str]:
+    normalized, problems = _normalize_answer(data)
+    if problems:
+        return problems
+    try:
+        updated = record_from_dict(normalized)
+    except SchemaError as error:
+        return [str(error)]
+    problems = validate_record(updated)
+    if problems:
+        return problems
+    return _fact_loss_problems(original, updated)
+
+
 def merge_answers(
     record: PatientRecord,
     asked: list[QuestionAnswer],
     *,
     config: LLMConfig | None = None,
 ) -> PatientRecord:
-    raise NotImplementedError("merge_answers is not implemented yet")
+    if not asked:
+        return recompute_missing_information(record)
+
+    def validate(answer: dict) -> list[str]:
+        return _validate_merge(answer, record)
+
+    user = _build_user_message(record, asked)
+    data = chat_json(MERGE_SYSTEM, user, validate=validate, config=config)
+    normalized, _problems = _normalize_answer(data)
+    return recompute_missing_information(record_from_dict(normalized))

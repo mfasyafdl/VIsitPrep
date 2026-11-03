@@ -253,3 +253,19 @@ The story is sent to the model inside `<patient_report>` tags after removing any
 - A *_denied flag that is true while its list is non-empty becomes null (the named items win; no fact is lost).
 
 The problems go through chat_json's one repair attempt: the model is asked once to fix the listed problems, and a second invalid answer raises LLMResponseError. When there are no problems, the normalized dict is built into a PatientRecord with record_from_dict and its missing_information is recomputed.
+
+## Merging answers (core.interview.merge_answers)
+
+`merge_answers(record, asked)` folds all follow-up answers into a new record with one model call. When `asked` is empty it returns a deep copy of the record with `missing_information` recomputed, with no model call.
+
+Message format: the user message has two parts separated by one blank line. The first part is the `<current_record>` tag with the current record as JSON (`record_to_dict` without the `missing_information` key, `ensure_ascii=False`, indent 2) between the opening and closing tags. The second part is the `<patient_report>` tag with one block per answer, each block "Question: <question>" on one line and "Answer: <answer>" on the next, blocks separated by one blank line. Before building, every `<current_record>`, `</current_record>`, `<patient_report>` and `</patient_report>` (case-insensitive, optional spaces inside the brackets) is removed from each question, each answer and the JSON text of the current record.
+
+Validation order: the validate callback first returns the problems from `core.extract._normalize`; when there are none, the `SchemaError` message from `record_from_dict` on the normalized dict, then the problems from `validate_record`; when there are none, the fact-loss guard problems, comparing the original record with the normalized new one. A rejected answer goes through chat_json's one repair attempt; a second rejection raises LLMResponseError.
+
+Fact-loss guard (deterministic; text compared with casefold and strip):
+- every scalar field that is not null in the original (patient_age, patient_age_text, patient_sex, reporting_on_behalf, reporter_relationship, complaint, onset, duration, severity, severity_note, pregnant) must not be null in the new record, else "keep <field>: it was known before";
+- every item of symptoms, allergies, medical_history and concerns in the original must still be in the new list, else "keep every item of <field>: missing <item>";
+- every medicine name in the original must still be a medicine name in the new list, else "keep every medicine: missing <name>";
+- medicines_denied, allergies_denied and medical_history_denied that were true stay true, unless the matching list is now non-empty (then null is allowed), else "keep <flag>: it was true before".
+
+A changed value is allowed; a removed fact is rejected and repaired once. LLM errors propagate unchanged, and the record and the asked list are never mutated.
