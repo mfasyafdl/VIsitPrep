@@ -707,3 +707,130 @@ AC6. "Change my details" → report the step line and whether the seven rows sho
 AC7. "Start over" on step 4 → report the step line and the story box content (must be "Step 1 of 4" and empty). Then paste the chest_pain example story and press Continue (an urgent alert shows), press "Start over" again and report whether the alert area is empty. At 375px report whether the header (brand and Start over) is on one line.
 AC8. `git status --short` shows only files from "Files you may change".
 ```
+
+## P2-5
+
+- Model: Qwen/Qwen3.8-27B
+- Date: 2026-11-03
+
+### Prompt (verbatim)
+
+```
+ROLE: You are the coding agent for Person 2 of VisitPrep, a new Python 3.10 + Gradio app, English only, that helps a patient prepare for a doctor visit. It organizes what the patient reports. It never diagnoses, never recommends treatment or medication changes.
+
+TEAM: Two people build this in parallel. Person 2 (you) owns app.py, ui/, tests/test_ui/, docs/deployment.md and docs/prompt_log_person2.md. Person 1 owns AGENTS.md, requirements*.txt, .gitignore, .env.example, docs/data_contract.md, core/, tests/test_core/, README.md and scripts/. Never edit Person 1's files, even to fix a bug; write a handoff with an exact reproduction instead. If you need a new dependency, ask for it in the handoff.
+
+BEFORE YOU WRITE CODE:
+1. Read AGENTS.md and docs/data_contract.md in full. Then read only the files listed under "Files to read" in the task.
+2. Write a short plan: the files you will change and one line per file on what changes. Then continue; do not wait for approval unless a rule below says stop.
+
+HARD RULES (breaking any of these means the task failed):
+- Only edit files listed under "Files you may change".
+- ui/ has no business logic. Alerts come only from core.redflag. Questions come only from core.interview. Summaries come only from core.summarize. Never reimplement any of them, and never write red-flag trigger words in ui/.
+- Event handlers live in ui/handlers.py as plain functions that take the session state dict plus inputs and return a new state dict; they never import gradio. ui/layout.py only builds components and wires events to those functions.
+- null means unknown. Never turn null into False, 0, "" or "none".
+- Escape every piece of patient text before it goes into gr.HTML or the PDF.
+- No catch-all `except Exception` that hides a failure. Show a visible English message instead.
+- Never print, log or hard-code MODELSCOPE_API_KEY. Tests never use the network.
+- Do not commit, push, merge or change git config. Do not touch any app I am running on port 7860; if you launch the app, use port 7861.
+- All user-facing text is English.
+
+WORK STYLE:
+- Do the steps in order. If one is impossible, say why in the report and continue with the next.
+- Make the smallest change that meets the acceptance criteria. No unrelated refactors.
+- After each file change, run `python -m pytest -q tests/test_ui` and fix failures before moving on. If the same command fails twice for a reason you cannot fix, stop and report the full error.
+- If something is ambiguous, ask me one specific question and stop.
+
+FINAL REPORT (use exactly these headings):
+## Plan vs done
+One line per planned item: DONE / PARTLY / NOT DONE, with file and function.
+## Acceptance criteria
+One line per criterion: PASS / FAIL / NOT RUN, with evidence (the command and the relevant output line, or what you saw).
+## Test results
+The exact last line of `python -m pytest -q`, with totals for tests/test_core and tests/test_ui.
+## Not verified
+Anything you did not check, and why. Never write "should work". If you did not run it, write NOT RUN.
+## Handoff for Person 1
+Exact reproductions or requests (file, function, input, expected, actual), or "None".
+## prompt_log
+Confirm you appended this whole prompt verbatim (Block A2, any extra block, and the task card, exactly as pasted) to docs/prompt_log_person2.md under the section id in the task title, with the model name "Qwen/Qwen3.8-27B", and that earlier sections are unchanged.
+
+DESIGN RULES v2 (exact values from the approved UI preview; do not invent other colours or sizes):
+
+Colour tokens: define each once as a CSS custom property on #vp-root (light values), and override them under `.dark #vp-root` (Gradio's dark class). Dark tokens come ONLY from the .dark class; never add a @media (prefers-color-scheme) block (Gradio already sets .dark in system mode, and the media block breaks ?__theme=light). --vp-ground and --vp-ink are also defined on :root and .dark so the page body uses the ground colour. No hard-coded hex anywhere else. Every rule that sets a background also sets color.
+  token                    light      dark
+  --vp-ground              #EEF4F2    #0E1A1C
+  --vp-surface             #FFFFFF    #16252A
+  --vp-ink                 #15232A    #E3EEEC
+  --vp-ink-2               #44565E    #AFC2C1
+  --vp-primary             #0B6B60    #4FC1B1
+  --vp-on-primary          #FFFFFF    #052421
+  --vp-pressed-edge        #06443D    #2E8C80
+  --vp-tint                #DCEEEA    #1D3A3A
+  --vp-on-tint             #0B4F47    #BDEDE5
+  --vp-input-border        #6B7F84    #6F8A8D   (2px)
+  --vp-hairline            #D3E0DD    #27393D
+  --vp-urgent-band         #C42B1C    #C42B1C   (band text #FFFFFF in both)
+  --vp-urgent-card-border  #C42B1C    #FF8A7A
+  --vp-attn-band           #FFD84D    #FFD84D   (band text #15232A in both)
+  Focus on every button, input, chip and link: outline 4px solid #FFD84D plus an inner 2px edge in --vp-ink (box-shadow inset).
+  Header bar: --vp-primary background with --vp-on-primary text in light mode; --vp-surface with --vp-ink text in dark mode.
+
+Type: "Atkinson Hyperlegible Next" from Google Fonts (weights 400, 600, 700, 800), fallback system-ui, sans-serif. Body 17px, helper text 15px, h1 26px below 1024px and 34px from 1024px. Inputs at least 17px.
+
+Buttons: 52px tall, radius 8px. Primary: filled --vp-primary, text --vp-on-primary, 4px bottom edge in --vp-pressed-edge (box-shadow 0 4px 0) that disappears while pressed (translateY 2px). Secondary: --vp-surface background, 2px --vp-primary border, --vp-primary text. Link-style: no background, underlined --vp-primary text, at least 44px tall. Exactly one primary button per step.
+
+Alerts are care cards: a coloured band whose heading names the action, then a body on --vp-surface.
+  Urgent: band --vp-urgent-band, an h2 heading "Get medical help now" that starts with a visually hidden "Urgent advice:" (class vp-sr-only). Card border 2px --vp-urgent-card-border. Body = core's alert message verbatim, escaped. Exactly one "Call 119" link with href="tel:119" styled as a button (class vp-btn-call: --vp-urgent-band background, white text, 52px, radius 8px, full width below 1024px) inside the card body.
+  Attention: band --vp-attn-band, heading "Tell your doctor about this", hidden "Attention:", body verbatim, no call button.
+  Container: always rendered; role="alert" when any urgent alert is present, otherwise aria-live="polite". With no alerts it is an empty container with no height and never says "no alerts" or "you are safe".
+
+Errors use --vp-surface with a 2px --vp-ink-2 border, never urgent red.
+
+Page order on every step: header bar (brand "VisitPrep" left, "Start over" link-style right) → alert area → "**Step N of 4**, <label>" with a 4-segment progress bar (labels: describe your symptoms / a few questions / check your details / your summary) → step content → action buttons → footer.
+Full-bleed page: no Gradio padding around #vp-root; 16px side padding below 1024px, 24px from 1024px.
+Footer text: "Before you type: your notes are sent to ModelScope to be organized. Leave out your name, address and phone number. The provider doesn't promise to delete them, and closing this tab doesn't delete them right away." then "VisitPrep doesn't diagnose, give medical advice or suggest treatment."
+Desktop from 1024px: a 250px progress rail on the left (current step: --vp-tint background, 3px --vp-primary left border, aria-current="step") and the content on the right. Below 1024px: one column, rail hidden. Rail labels: Describe / Questions / Check details / Your summary.
+ui/theme.py and ui/components.py already implement all of the above (merged in P2-1 and P2-1-FIX-1). Reuse their classes and functions; do not rewrite or duplicate the theme.
+
+TASK P2-5 — Run on the real core: clear error messages, a missing-key banner, the queue and scroll to top. Log section: P2-5.
+
+Files to read: AGENTS.md, docs/data_contract.md, core/llm.py, core/extract.py, core/interview.py, core/summarize.py, core/prompts.py (all read only), app.py, ui/backend.py, ui/handlers.py, ui/components.py, ui/layout.py, tests/test_ui/test_handlers_steps12.py, tests/test_ui/test_handlers_steps34.py, tests/test_ui/test_handlers_step4.py.
+Files you may change: app.py, ui/backend.py, ui/handlers.py, ui/layout.py, tests/test_ui/test_real_core.py (new), tests/test_ui/test_handlers_steps12.py, tests/test_ui/test_handlers_steps34.py, tests/test_ui/test_handlers_step4.py (the last three only where this card changes an expected message; say which test in the report), docs/prompt_log_person2.md.
+Do not create or edit ui/export_pdf.py or anything in ui/assets/: Person 1 is building the PDF module in parallel (task P2-4a).
+
+Facts about the current code (main after P2-3b, 447 tests pass):
+- core is complete: extract_record, merge_answers and generate_summary make one model call each; chat_json(config=None) calls core.llm.load_config(), which raises ConfigError (a subclass of LLMError) with "The AI service is not configured on this server." when MODELSCOPE_API_KEY is missing.
+- core.llm error messages (str(err)): LLMAuthError "The AI service rejected the server's key."; LLMQuotaError "The free AI quota for today may be used up. Please try again later."; LLMServerError "The AI service had a problem. Please try again."; LLMResponseError "The AI service returned an answer we could not read. Please try again."; LLMNetworkError "The AI service did not respond."; LLMContentFilterError "The AI service could not process this text. Please describe your symptoms in plain, simple words and try again."
+- The handlers append their own sentence, so a server error on summary reads "The AI service had a problem. Please try again. Your details are kept. Press Write my summary to try again." ("try again" twice).
+- A ConfigError on Continue reads "...not configured on this server. Your text is kept. Press Continue to try again.", but pressing again can never help.
+- The model calls are only in on_continue (extract), enter_review (merge) and on_summarize (summary). recompute_alerts runs before extract, so alerts already work without a key.
+
+Steps:
+1. ui/handlers.py: one helper _llm_error_text(err: LLMError, kept: str, retry: str | None) -> str used by on_continue, enter_review and on_summarize for every LLMError:
+   - start from str(err) with a trailing " Please try again." removed (only that exact ending; "Please try again later." stays);
+   - add " " + kept: on_continue "Your text is kept.", enter_review "Your answers are kept.", on_summarize "Your details are kept.";
+   - add " " + retry, except for ConfigError and LLMAuthError, where nothing is added because pressing again cannot help: on_continue "Press Continue to try again.", enter_review "You can still check and change your details below.", on_summarize "Press Write my summary to try again.";
+   Expected: LLMServerError on summary → "The AI service had a problem. Your details are kept. Press Write my summary to try again."; ConfigError on Continue → "The AI service is not configured on this server. Your text is kept."; LLMQuotaError on Continue → "The free AI quota for today may be used up. Please try again later. Your text is kept. Press Continue to try again."
+   Keep the existing behaviour otherwise (state kept, step unchanged, NotImplementedError → _NOT_READY).
+2. ui/handlers.py: in the same three handlers, after the LLMError and NotImplementedError branches, catch any other Exception: log it with logging.getLogger("visitprep").exception("model step failed") (never log the story or the record), keep the state, and set error "Something went wrong on our side. Your information is kept. Please try again." Update the module docstring: these three places and recompute_alerts are the only broad excepts.
+3. ui/backend.py: config_problem() -> str | None: None in preview mode; otherwise call core.llm.load_config() and return str(err) on ConfigError, else None. No other change.
+4. ui/layout.py:
+   a. When config_problem() returns a message at build time, show directly below the header (above the alert area) a gr.HTML with components.alerts_error_html(message + " Warning-sign checks still work, but VisitPrep cannot write your questions or your note.") and elem_id "vp-config-error". Continue stays enabled, so alerts still run.
+   b. Scroll to top: after the final render of the Continue, Save answer, Skip this question, I'm done, Write my summary, Change my details and Start over chains, add .then(None, js="() => { const r = document.querySelector('#vp-root'); if (r) r.scrollIntoView({block: 'start'}); }"). Not after the step 3 Change, Save or Cancel buttons (the editor must stay in view). Tested with Gradio 6.31.0: .then(None, js=...) runs after the render.
+5. app.py: call demo.queue(default_concurrency_limit=4) before launch (keep demo at module level so Studio can import it), and pass show_error=False to launch. Nothing else changes.
+6. tests/test_ui/test_real_core.py: fake only core.llm._post (and core.llm._sleep to a no-op) with monkeypatch; never fake core functions. Set ui.backend.PREVIEW to False, MODELSCOPE_API_KEY to "test-key" and MODELSCOPE_MODEL to "Qwen/Qwen3.8-27B" with monkeypatch.setenv. The fake picks its answer by payload["messages"][0]["content"] (EXTRACT_SYSTEM, MERGE_SYSTEM or SUMMARY_SYSTEM from core.prompts) and returns (200, json.dumps({"choices": [{"message": {"content": json.dumps(data)}}]})). For extract it returns a record that has only complaint set and every other field unknown (null values, empty lists, *_denied flags null), so five questions are available. For merge it returns that same record, so the fact-loss guard passes.
+   - happy path: on_continue with a neutral fictional story → three on_answer + two on_skip → enter_review → on_summarize: step 4, summary set, and exactly 3 calls to _post (extract, merge, summary in that order);
+   - each of LLMServerError (status 500), LLMQuotaError (status 429) and LLMAuthError (status 401) on the summary call: the exact text from step 1 (no "Please try again." directly before "Your details are kept."), step stays 3, record unchanged;
+   - no key (monkeypatch.delenv MODELSCOPE_API_KEY and point core.llm._env_file_path to a missing file in tmp_path): on_continue with a story containing "I fainted this morning" → error "The AI service is not configured on this server. Your text is kept.", step 1, and an alert is present; config_problem() returns that message; with PREVIEW True it returns None;
+   - an unexpected RuntimeError from _post during merge → the generic message, merged True, record unchanged;
+   - two states from new_state() run on separate stories never share the record, alerts, asked or skipped lists (change one, the other is unchanged).
+7. Append this prompt verbatim to docs/prompt_log_person2.md as section "## P2-5" with the line "Model: Qwen/Qwen3.8-27B", inside a ``` code block. Do not change earlier sections.
+
+Acceptance criteria:
+AC1. `python -m pytest -q` passes; report the count and the tests/test_ui count.
+AC2. `grep -rn -i "breath\|chest\|faint\|seizure" ui/` is empty (the test file is under tests/, not ui/).
+AC3. Manual without a key: in PowerShell `Remove-Item Env:MODELSCOPE_API_KEY -ErrorAction SilentlyContinue; Remove-Item Env:VISITPREP_PREVIEW -ErrorAction SilentlyContinue`, rename .env to .env.off if you have one, run on port 7861 at 375px. Report the banner text; then paste the chest_pain example story and press Continue: report the alert heading and the error text (it must not say "try again"). Rename .env.off back afterwards.
+AC4. Manual in preview at 375px: child_cough story → Continue → I'm done → scroll to the bottom → Write my summary. Report window.scrollY right after step 4 appears (must be 0 or the top of #vp-root) and the scrollWidth.
+AC5. `git status --short` shows only files from "Files you may change".
+```

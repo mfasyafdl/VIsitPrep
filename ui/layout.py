@@ -55,6 +55,11 @@ COPY_SCRIPT_JS = (
     "}, () => { b.textContent = 'Select the text to copy'; }); }"
 )
 
+SCROLL_TO_TOP_JS = (
+    "() => { const r = document.querySelector('#vp-root'); "
+    "if (r) r.scrollIntoView({block: 'start'}); }"
+)
+
 SEVERITY_CHOICES = (
     ("Mild", "mild"),
     ("Moderate", "moderate"),
@@ -283,6 +288,17 @@ def build_interface() -> None:
             )
         if backend.PREVIEW:
             gr.HTML(preview_banner_html(), elem_id="vp-preview")
+        config_message = backend.config_problem()
+        if config_message is not None:
+            gr.HTML(
+                alerts_error_html(
+                    config_message
+                    + " Warning-sign checks still work, "
+                    "but VisitPrep cannot write your questions "
+                    "or your note."
+                ),
+                elem_id="vp-config-error",
+            )
         alerts_area = gr.HTML(alerts_html([]), elem_id="vp-alerts")
         with gr.Row(elem_id="vp-main"):
             with gr.Column(elem_id="vp-rail"):
@@ -606,7 +622,7 @@ def build_interface() -> None:
         _render,
         inputs=[state],
         outputs=render_outputs,
-    )
+    ).then(None, js=SCROLL_TO_TOP_JS)
 
     save_model_step = save_btn.click(
         handlers.on_answer,
@@ -626,7 +642,7 @@ def build_interface() -> None:
         _render,
         inputs=[state],
         outputs=render_outputs,
-    )
+    ).then(None, js=SCROLL_TO_TOP_JS)
 
     skip_model_step = skip_btn.click(
         handlers.on_skip,
@@ -646,7 +662,7 @@ def build_interface() -> None:
         _render,
         inputs=[state],
         outputs=render_outputs,
-    )
+    ).then(None, js=SCROLL_TO_TOP_JS)
 
     done_merge_step = done_btn.click(
         handlers.on_finish,
@@ -665,7 +681,7 @@ def build_interface() -> None:
         _render,
         inputs=[state],
         outputs=render_outputs,
-    )
+    ).then(None, js=SCROLL_TO_TOP_JS)
 
     for section, _label in DETAIL_ROWS:
         part = step3_parts[section]
@@ -713,7 +729,7 @@ def build_interface() -> None:
         _render,
         inputs=[state],
         outputs=render_outputs,
-    )
+    ).then(None, js=SCROLL_TO_TOP_JS)
 
     copy_btn.click(fn=None, js=COPY_SCRIPT_JS)
 
@@ -725,7 +741,7 @@ def build_interface() -> None:
         _render,
         inputs=[state],
         outputs=render_outputs,
-    )
+    ).then(None, js=SCROLL_TO_TOP_JS)
 
     start_over_btn.click(
         _reset,
@@ -749,4 +765,4 @@ def build_interface() -> None:
             done_merge_step,
             summarize_model_step,
         ],
-    )
+    ).then(None, js=SCROLL_TO_TOP_JS)
