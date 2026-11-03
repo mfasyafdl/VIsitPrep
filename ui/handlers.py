@@ -4,15 +4,17 @@ Plain functions that take the session state dict plus inputs and
 return a new state dict. They never mutate their input and never
 import gradio. Alerts come only from core.redflag, questions only
 from core.interview, and the model calls only through ui.backend.
-recompute_alerts is the only place a broad except Exception is
-allowed, because the failure is shown to the user.
+The only broad except Exception is in recompute_alerts and in the
+three model steps (on_continue, enter_review and on_summarize);
+in every case the failure is shown to the user.
 """
 
 import copy
+import logging
 
 from core import interview
 from core import redflag
-from core.llm import LLMError
+from core.llm import ConfigError, LLMAuthError, LLMError
 from core.schema import (
     SEX_VALUES,
     Alert,
@@ -32,6 +34,29 @@ _NOT_READY = (
     "This part of VisitPrep is not finished yet. "
     "Your notes are kept. Please try again later."
 )
+
+_MODEL_STEP_FAILED = (
+    "Something went wrong on our side. Your information is kept. "
+    "Please try again."
+)
+
+
+def _llm_error_text(err: LLMError, kept: str, retry: str | None) -> str:
+    """The user-facing text for a model failure.
+
+    str(err) with a trailing " Please try again." removed (only that
+    exact ending; "Please try again later." stays), then the kept
+    sentence, then the retry sentence. retry is None for ConfigError
+    and LLMAuthError, where pressing again cannot help.
+    """
+    text = str(err)
+    ending = " Please try again."
+    if text.endswith(ending):
+        text = text[: -len(ending)]
+    text += " " + kept
+    if retry is not None:
+        text += " " + retry
+    return text
 
 
 def _alert_dicts(alerts) -> list[dict]:
@@ -118,12 +143,20 @@ def on_continue(state: dict, story, age_text, sex) -> dict:
     try:
         record = backend.extract(text, details)
     except LLMError as err:
-        result["error"] = (
-            str(err) + " Your text is kept. Press Continue to try again."
+        result["error"] = _llm_error_text(
+            err,
+            "Your text is kept.",
+            None
+            if isinstance(err, (ConfigError, LLMAuthError))
+            else "Press Continue to try again.",
         )
         return bump(result)
     except NotImplementedError:
         result["error"] = _NOT_READY
+        return bump(result)
+    except Exception:
+        logging.getLogger("visitprep").exception("model step failed")
+        result["error"] = _MODEL_STEP_FAILED
         return bump(result)
     result["record"] = record_to_dict(record)
     result = recompute_alerts(result)
@@ -233,13 +266,18 @@ def enter_review(state: dict) -> dict:
             [QuestionAnswer(**qa) for qa in state["asked"]],
         )
     except LLMError as err:
-        result["error"] = (
-            str(err)
-            + " Your answers are kept. "
-            "You can still check and change your details below."
+        result["error"] = _llm_error_text(
+            err,
+            "Your answers are kept.",
+            None
+            if isinstance(err, (ConfigError, LLMAuthError))
+            else "You can still check and change your details below.",
         )
     except NotImplementedError:
         result["error"] = _NOT_READY
+    except Exception:
+        logging.getLogger("visitprep").exception("model step failed")
+        result["error"] = _MODEL_STEP_FAILED
     else:
         result["record"] = record_to_dict(merged)
         result["error"] = None
@@ -483,13 +521,20 @@ def on_summarize(state: dict) -> dict:
             state["story"],
         )
     except LLMError as err:
-        result["error"] = (
-            str(err)
-            + " Your details are kept. Press Write my summary to try again."
+        result["error"] = _llm_error_text(
+            err,
+            "Your details are kept.",
+            None
+            if isinstance(err, (ConfigError, LLMAuthError))
+            else "Press Write my summary to try again.",
         )
         return bump(result)
     except NotImplementedError:
         result["error"] = _NOT_READY
+        return bump(result)
+    except Exception:
+        logging.getLogger("visitprep").exception("model step failed")
+        result["error"] = _MODEL_STEP_FAILED
         return bump(result)
     result["summary"] = {
         "doctor_card": summary.doctor_card,
