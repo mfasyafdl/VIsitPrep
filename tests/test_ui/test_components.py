@@ -1,6 +1,7 @@
 """Tests for the pure HTML functions in ui/components.py."""
 
 import re
+from datetime import date
 from types import SimpleNamespace
 
 from ui.components import (
@@ -13,12 +14,17 @@ from ui.components import (
     detail_row_html,
     footer_html,
     header_html,
+    note_date,
     pips_html,
     preview_banner_html,
     progress_html,
     question_heading_html,
     question_text_html,
+    questions_html,
     rail_html,
+    read_time_seconds,
+    script_html,
+    visit_note_html,
 )
 
 
@@ -148,10 +154,114 @@ def test_error_html_is_escaped_and_neutral():
 def test_header_and_footer_text():
     header = header_html()
     assert "VisitPrep" in header
-    assert "Start over" in header
+    assert 'href="#"' not in header
     footer = footer_html()
     assert "Leave out your name, address and phone number" in footer
     assert "VisitPrep doesn't diagnose, give medical advice or suggest treatment." in footer
+
+
+# Step 4: visit note, script, questions
+
+
+def _summary(doctor_card=None, script=None, questions=None):
+    return {
+        "doctor_card": doctor_card
+        if doctor_card is not None
+        else "Patient: 7 years old",
+        "patient_script": (
+            script if script is not None else "I am here about my son."
+        ),
+        "priority_questions": (
+            [] if questions is None else list(questions)
+        ),
+    }
+
+
+def test_note_date_formats_day_without_leading_zero():
+    assert note_date(date(2026, 11, 3)) == "3 November 2026"
+    assert note_date(date(2027, 1, 12)) == "12 January 2027"
+
+
+def test_visit_note_html_escapes_doctor_card_text():
+    payload = "<img src=x onerror=alert(1)>"
+    html_text = visit_note_html(
+        _summary(doctor_card=f"Problem: {payload}"), date(2026, 11, 3)
+    )
+    assert "<img" not in html_text
+    assert "&lt;img src=x onerror=alert(1)&gt;" in html_text
+
+
+def test_script_html_escapes_the_script():
+    payload = "<img src=x onerror=alert(1)>"
+    html_text = script_html(_summary(script=payload))
+    assert "<img" not in html_text
+    assert "&lt;img src=x onerror=alert(1)&gt;" in html_text
+
+
+def test_questions_html_escapes_a_question():
+    payload = "<img src=x onerror=alert(1)>"
+    html_text = questions_html(_summary(questions=[payload]))
+    assert "<img" not in html_text
+    assert "&lt;img src=x onerror=alert(1)&gt;" in html_text
+
+
+def test_visit_note_html_contains_title_date_stamp_and_rows():
+    html_text = visit_note_html(
+        _summary(doctor_card="Patient: 7 years old\nProblem: a cough"),
+        date(2026, 11, 3),
+    )
+    assert "Visit note" in html_text
+    assert "For the doctor" in html_text
+    assert "3 November 2026" in html_text
+    assert 'class="vp-stamp"' in html_text
+    assert 'class="vp-perforation"' in html_text
+    assert "<strong>Patient:</strong> 7 years old" in html_text
+    assert "Written by the patient with VisitPrep. Not a diagnosis." in html_text
+
+
+def test_visit_note_html_splits_on_the_first_separator_only():
+    html_text = visit_note_html(
+        _summary(doctor_card='Severity: mild ("still playing")'),
+        date(2027, 1, 12),
+    )
+    assert "<strong>Severity:</strong> mild (&quot;still playing&quot;)" in html_text
+
+
+def test_visit_note_html_line_without_separator_is_shown_whole():
+    html_text = visit_note_html(
+        _summary(doctor_card="Allergies not mentioned"), date(2027, 1, 12)
+    )
+    assert "<strong>" not in html_text
+    assert "Allergies not mentioned" in html_text
+
+
+def test_read_time_seconds():
+    assert read_time_seconds(" ".join(["word"] * 150)) == 60
+    assert read_time_seconds(" ".join(["word"] * 35)) == 14
+    assert read_time_seconds("") == 0
+
+
+def test_script_html_has_heading_text_and_read_time():
+    html_text = script_html(_summary())
+    assert "What to say" in html_text
+    assert '<p id="vp-script-text">' in html_text
+    assert "seconds when read aloud" in html_text
+    empty = script_html(_summary(script=""))
+    assert "seconds when read aloud" not in empty
+    assert '<p id="vp-script-text"></p>' in empty
+
+
+def test_questions_html_two_questions_one_ol_two_li():
+    html_text = questions_html(
+        _summary(questions=["Should he stay home?", "When to come back?"])
+    )
+    assert "Questions to ask" in html_text
+    assert html_text.count("<ol") == 1
+    assert html_text.count("<li>") == 2
+
+
+def test_questions_html_empty_returns_empty_string():
+    assert questions_html(_summary(questions=[])) == ""
 
 
 def test_preview_banner():

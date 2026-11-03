@@ -7,6 +7,7 @@ they are given. No gradio imports.
 """
 
 import html
+from datetime import date
 
 # Step headings (h1) shown inside each step.
 STEP_NAMES = (
@@ -37,12 +38,81 @@ _ATTENTION = "attention"
 
 
 def header_html() -> str:
-    """Header bar: brand on the left, Start over link on the right."""
+    """Header bar content: the brand only (the Start over button is
+    a real Gradio button in the layout)."""
+    return '<span class="vp-brand">VisitPrep</span>'
+
+
+def note_date(prepared_on: date) -> str:
+    """Format a date as '3 November 2026' (no leading zero day)."""
+    return f"{prepared_on.day} {prepared_on.strftime('%B')} {prepared_on.year}"
+
+
+def _note_row(line: str) -> str:
+    """One doctor card line: bold label before the first ': ', else whole."""
+    if ": " in line:
+        label, value = line.split(": ", 1)
+        return (
+            '<div class="vp-note-row">'
+            f"<strong>{html.escape(label, quote=True)}:</strong> "
+            f"{html.escape(value, quote=True)}</div>"
+        )
+    return f'<div class="vp-note-row">{html.escape(line, quote=True)}</div>'
+
+
+def visit_note_html(summary: dict, prepared_on: date) -> str:
+    """The visit note slip: title with date, stamp, rows, helper line."""
+    rows = []
+    for line in str(summary["doctor_card"]).splitlines():
+        if line.strip():
+            rows.append(_note_row(line.strip()))
     return (
-        '<header class="vp-header">'
-        '<span class="vp-brand">VisitPrep</span>'
-        '<a class="vp-btn vp-btn-link" href="#">Start over</a>'
-        "</header>"
+        '<div class="vp-note">'
+        '<div class="vp-note-head">'
+        '<h2 class="vp-note-title">Visit note</h2>'
+        f'<span class="vp-note-date">{note_date(prepared_on)}</span>'
+        "</div>"
+        '<span class="vp-stamp">For the doctor</span>'
+        '<div class="vp-perforation"></div>'
+        + "".join(rows)
+        + '<p class="vp-helper">Written by the patient with VisitPrep. '
+        "Not a diagnosis.</p>"
+        "</div>"
+    )
+
+
+def read_time_seconds(script: str) -> int:
+    """Whole seconds to read the script aloud at 150 words per minute."""
+    return round(len(str(script).split()) / 150 * 60)
+
+
+def script_html(summary: dict) -> str:
+    """The 'What to say' script with its read time when not empty."""
+    script = str(summary["patient_script"])
+    parts = [
+        '<h2 class="vp-script-heading">What to say</h2>',
+        f'<p id="vp-script-text">{html.escape(script, quote=True)}</p>',
+    ]
+    seconds = read_time_seconds(script)
+    if seconds > 0:
+        parts.append(
+            f'<p class="vp-helper">About {seconds} seconds when read aloud</p>'
+        )
+    return "".join(parts)
+
+
+def questions_html(summary: dict) -> str:
+    """The 'Questions to ask' list; empty string when there are none."""
+    questions = list(summary["priority_questions"])
+    if not questions:
+        return ""
+    items = "".join(
+        f"<li>{html.escape(str(question), quote=True)}</li>"
+        for question in questions
+    )
+    return (
+        '<h2 class="vp-questions-heading">Questions to ask</h2>'
+        f'<ol class="vp-questions">{items}</ol>'
     )
 
 
