@@ -178,3 +178,83 @@ def preview_banner_html() -> str:
         "Preview mode: example answers only. Nothing is sent to ModelScope."
         "</div>"
     )
+
+
+# Message shown in the alert area when the core alert check fails.
+ALERTS_ERROR_MESSAGE = (
+    "We could not check your answers for warning signs. "
+    "If you feel very unwell, call 119."
+)
+
+# The interview has five questions, shown as five pips.
+QUESTION_COUNT = 5
+
+
+def pips_html(answered: int, skipped_positions: list[int], current: int) -> str:
+    """The five question pips.
+
+    Answered pips are filled with --vp-primary, skipped pips have a
+    dashed border, the current pip is --vp-tint with a --vp-primary
+    border and upcoming pips are empty with the input border colour.
+    Every question before the current one is answered or skipped.
+    """
+    if not 1 <= current <= QUESTION_COUNT:
+        raise ValueError(f"current must be 1..{QUESTION_COUNT}, got {current!r}")
+    skipped = set(skipped_positions)
+    pips = []
+    for position in range(1, QUESTION_COUNT + 1):
+        if position in skipped:
+            classes = "vp-pip vp-pip-skipped"
+        elif position < current:
+            classes = "vp-pip vp-pip-answered"
+        elif position == current:
+            classes = "vp-pip vp-pip-current"
+        else:
+            classes = "vp-pip"
+        pips.append(f'<span class="{classes}"></span>')
+    label = html.escape(
+        f"{answered} of {QUESTION_COUNT} questions answered"
+    )
+    return (
+        f'<div class="vp-pips" role="img" aria-label="{label}">'
+        + "".join(pips)
+        + "</div>"
+    )
+
+
+def question_heading_html(n: int) -> str:
+    """'Question N of 5' heading for the step 2 question."""
+    if not 1 <= n <= QUESTION_COUNT:
+        raise ValueError(f"n must be 1..{QUESTION_COUNT}, got {n!r}")
+    return f'<h2 class="vp-question-heading">Question {n} of {QUESTION_COUNT}</h2>'
+
+
+def question_text_html(text: str) -> str:
+    """The question text at 23px bold, escaped; empty when no text."""
+    if not text:
+        return ""
+    return f'<p class="vp-question-text">{html.escape(str(text), quote=True)}</p>'
+
+
+def answers_list_html(asked: list) -> str:
+    """The answered questions with the patient's answers, escaped.
+
+    Each entry of asked is a dict with "question" and "answer".
+    """
+    items = []
+    for qa in asked:
+        question = html.escape(str(qa["question"]), quote=True)
+        answer = html.escape(str(qa["answer"]), quote=True)
+        items.append(
+            '<div class="vp-answer">'
+            f'<p class="vp-answer-question">{question}</p>'
+            f'<p class="vp-answer-text">{answer}</p>'
+            "</div>"
+        )
+    if not items:
+        return (
+            '<div class="vp-answers">'
+            '<p class="vp-answers-none">No answers yet.</p>'
+            "</div>"
+        )
+    return '<div class="vp-answers">' + "".join(items) + "</div>"

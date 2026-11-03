@@ -4,12 +4,17 @@ import re
 from types import SimpleNamespace
 
 from ui.components import (
+    ALERTS_ERROR_MESSAGE,
+    answers_list_html,
     alerts_error_html,
     alerts_html,
     footer_html,
     header_html,
+    pips_html,
     preview_banner_html,
     progress_html,
+    question_heading_html,
+    question_text_html,
     rail_html,
 )
 
@@ -152,4 +157,90 @@ def test_preview_banner():
     assert (
         "Preview mode: example answers only. Nothing is sent to ModelScope."
         in banner
+    )
+
+
+def test_pips_first_question_current():
+    html_text = pips_html(0, [], 1)
+    classes = re.findall(r'<span class="([^"]+)"></span>', html_text)
+    assert classes == [
+        "vp-pip vp-pip-current",
+        "vp-pip",
+        "vp-pip",
+        "vp-pip",
+        "vp-pip",
+    ]
+
+
+def test_pips_answered_skipped_current_upcoming():
+    html_text = pips_html(2, [2], 3)
+    classes = re.findall(r'<span class="([^"]+)"></span>', html_text)
+    assert classes == [
+        "vp-pip vp-pip-answered",
+        "vp-pip vp-pip-skipped",
+        "vp-pip vp-pip-current",
+        "vp-pip",
+        "vp-pip",
+    ]
+
+
+def test_pips_all_answered_and_skipped():
+    html_text = pips_html(3, [3, 4], 5)
+    classes = re.findall(r'<span class="([^"]+)"></span>', html_text)
+    assert classes == [
+        "vp-pip vp-pip-answered",
+        "vp-pip vp-pip-answered",
+        "vp-pip vp-pip-skipped",
+        "vp-pip vp-pip-skipped",
+        "vp-pip vp-pip-current",
+    ]
+
+
+def test_pips_out_of_range_raises():
+    import pytest
+
+    with pytest.raises(ValueError):
+        pips_html(0, [], 6)
+
+
+def test_answers_list_escapes_question_and_answer():
+    html_text = answers_list_html(
+        [{"question": "<b>Q</b>", "answer": "A & B"}]
+    )
+    assert "<b>" not in html_text
+    assert "&lt;b&gt;Q&lt;/b&gt;" in html_text
+    assert "A &amp; B" in html_text
+
+
+def test_answers_list_empty():
+    html_text = answers_list_html([])
+    assert "No answers yet." in html_text
+    assert "vp-answer-question" not in html_text
+
+
+def test_question_heading_html():
+    assert (
+        question_heading_html(3)
+        == '<h2 class="vp-question-heading">Question 3 of 5</h2>'
+    )
+    import pytest
+
+    with pytest.raises(ValueError):
+        question_heading_html(0)
+    with pytest.raises(ValueError):
+        question_heading_html(6)
+
+
+def test_question_text_html_escapes_and_is_empty_when_blank():
+    assert question_text_html("") == ""
+    html_text = question_text_html("<i>Feel</i> worse?")
+    assert "vp-question-text" in html_text
+    assert "&lt;i&gt;Feel&lt;/i&gt; worse?" in html_text
+
+
+def test_alerts_error_message_text():
+    assert (
+        ALERTS_ERROR_MESSAGE
+        == "We could not check your answers for warning signs. "
+        "If you feel very unwell, call 119."
     )

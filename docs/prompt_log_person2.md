@@ -203,3 +203,135 @@ AC3. Playwright with colorScheme "dark" and ?__theme=light: #vp-root background 
 AC4. `grep -n "#[0-9A-Fa-f]\{3,6\}" ui/*.py` still shows hex values only in the token blocks of ui/theme.py.
 AC5. Save screenshots of all five Playwright cases to a folder outside the repo and give the paths; do not describe what they look like.
 ```
+
+## P2-2
+
+- Model: Qwen/Qwen3.8-27B
+- Date: 2026-11-03
+
+### Prompt (verbatim)
+
+```
+ROLE: You are the coding agent for Person 2 of VisitPrep, a new Python 3.10 + Gradio app, English only, that helps a patient prepare for a doctor visit. It organizes what the patient reports. It never diagnoses, never recommends treatment or medication changes.
+
+TEAM: Two people build this in parallel. Person 2 (you) owns app.py, ui/, tests/test_ui/, docs/deployment.md and docs/prompt_log_person2.md. Person 1 owns AGENTS.md, requirements*.txt, .gitignore, .env.example, docs/data_contract.md, core/, tests/test_core/, README.md and scripts/. Never edit Person 1's files, even to fix a bug; write a handoff with an exact reproduction instead. If you need a new dependency, ask for it in the handoff.
+
+BEFORE YOU WRITE CODE:
+1. Read AGENTS.md and docs/data_contract.md in full. Then read only the files listed under "Files to read" in the task.
+2. Write a short plan: the files you will change and one line per file on what changes. Then continue; do not wait for approval unless a rule below says stop.
+
+HARD RULES (breaking any of these means the task failed):
+- Only edit files listed under "Files you may change".
+- ui/ has no business logic. Alerts come only from core.redflag. Questions come only from core.interview. Summaries come only from core.summarize. Never reimplement any of them, and never write red-flag trigger words in ui/.
+- Event handlers live in ui/handlers.py as plain functions that take the session state dict plus inputs and return a new state dict; they never import gradio. ui/layout.py only builds components and wires events to those functions.
+- null means unknown. Never turn null into False, 0, "" or "none".
+- Escape every piece of patient text before it goes into gr.HTML or the PDF.
+- No catch-all `except Exception` that hides a failure. Show a visible English message instead.
+- Never print, log or hard-code MODELSCOPE_API_KEY. Tests never use the network.
+- Do not commit, push, merge or change git config. Do not touch any app I am running on port 7860; if you launch the app, use port 7861.
+- All user-facing text is English.
+
+WORK STYLE:
+- Do the steps in order. If one is impossible, say why in the report and continue with the next.
+- Make the smallest change that meets the acceptance criteria. No unrelated refactors.
+- After each file change, run `python -m pytest -q tests/test_ui` and fix failures before moving on. If the same command fails twice for a reason you cannot fix, stop and report the full error.
+- If something is ambiguous, ask me one specific question and stop.
+
+FINAL REPORT (use exactly these headings):
+## Plan vs done
+One line per planned item: DONE / PARTLY / NOT DONE, with file and function.
+## Acceptance criteria
+One line per criterion: PASS / FAIL / NOT RUN, with evidence (the command and the relevant output line, or what you saw).
+## Test results
+The exact last line of `python -m pytest -q`, with totals for tests/test_core and tests/test_ui.
+## Not verified
+Anything you did not check, and why. Never write "should work". If you did not run it, write NOT RUN.
+## Handoff for Person 1
+Exact reproductions or requests (file, function, input, expected, actual), or "None".
+## prompt_log
+Confirm you appended this whole prompt verbatim (Block A2, any extra block, and the task card, exactly as pasted) to docs/prompt_log_person2.md under the section id in the task title, with the model name "Qwen/Qwen3.8-27B", and that earlier sections are unchanged.
+
+DESIGN RULES v2 (exact values from the approved UI preview; do not invent other colours or sizes):
+
+Colour tokens: define each once as a CSS custom property on #vp-root (light values), and override them under `.dark #vp-root` (Gradio's dark class). Dark tokens come ONLY from the .dark class; never add a @media (prefers-color-scheme) block (Gradio already sets .dark in system mode, and the media block breaks ?__theme=light). --vp-ground and --vp-ink are also defined on :root and .dark so the page body uses the ground colour. No hard-coded hex anywhere else. Every rule that sets a background also sets color.
+  token                    light      dark
+  --vp-ground              #EEF4F2    #0E1A1C
+  --vp-surface             #FFFFFF    #16252A
+  --vp-ink                 #15232A    #E3EEEC
+  --vp-ink-2               #44565E    #AFC2C1
+  --vp-primary             #0B6B60    #4FC1B1
+  --vp-on-primary          #FFFFFF    #052421
+  --vp-pressed-edge        #06443D    #2E8C80
+  --vp-tint                #DCEEEA    #1D3A3A
+  --vp-on-tint             #0B4F47    #BDEDE5
+  --vp-input-border        #6B7F84    #6F8A8D   (2px)
+  --vp-hairline            #D3E0DD    #27393D
+  --vp-urgent-band         #C42B1C    #C42B1C   (band text #FFFFFF in both)
+  --vp-urgent-card-border  #C42B1C    #FF8A7A
+  --vp-attn-band           #FFD84D    #FFD84D   (band text #15232A in both)
+  Focus on every button, input, chip and link: outline 4px solid #FFD84D plus an inner 2px edge in --vp-ink (box-shadow inset).
+  Header bar: --vp-primary background with --vp-on-primary text in light mode; --vp-surface with --vp-ink text in dark mode.
+
+Type: "Atkinson Hyperlegible Next" from Google Fonts (weights 400, 600, 700, 800), fallback system-ui, sans-serif. Body 17px, helper text 15px, h1 26px below 1024px and 34px from 1024px. Inputs at least 17px.
+
+Buttons: 52px tall, radius 8px. Primary: filled --vp-primary, text --vp-on-primary, 4px bottom edge in --vp-pressed-edge (box-shadow 0 4px 0) that disappears while pressed (translateY 2px). Secondary: --vp-surface background, 2px --vp-primary border, --vp-primary text. Link-style: no background, underlined --vp-primary text, at least 44px tall. Exactly one primary button per step.
+
+Alerts are care cards: a coloured band whose heading names the action, then a body on --vp-surface.
+  Urgent: band --vp-urgent-band, an h2 heading "Get medical help now" that starts with a visually hidden "Urgent advice:" (class vp-sr-only). Card border 2px --vp-urgent-card-border. Body = core's alert message verbatim, escaped. Exactly one "Call 119" link with href="tel:119" styled as a button (class vp-btn-call: --vp-urgent-band background, white text, 52px, radius 8px, full width below 1024px) inside the card body.
+  Attention: band --vp-attn-band, heading "Tell your doctor about this", hidden "Attention:", body verbatim, no call button.
+  Container: always rendered; role="alert" when any urgent alert is present, otherwise aria-live="polite". With no alerts it is an empty container with no height and never says "no alerts" or "you are safe".
+
+Errors use --vp-surface with a 2px --vp-ink-2 border, never urgent red.
+
+Page order on every step: header bar (brand "VisitPrep" left, "Start over" link-style right) → alert area → "**Step N of 4**, <label>" with a 4-segment progress bar (labels: describe your symptoms / a few questions / check your details / your summary) → step content → action buttons → footer.
+Full-bleed page: no Gradio padding around #vp-root; 16px side padding below 1024px, 24px from 1024px.
+Footer text: "Before you type: your notes are sent to ModelScope to be organized. Leave out your name, address and phone number. The provider doesn't promise to delete them, and closing this tab doesn't delete them right away." then "VisitPrep doesn't diagnose, give medical advice or suggest treatment."
+Desktop from 1024px: a 250px progress rail on the left (current step: --vp-tint background, 3px --vp-primary left border, aria-current="step") and the content on the right. Below 1024px: one column, rail hidden. Rail labels: Describe / Questions / Check details / Your summary.
+ui/theme.py and ui/components.py already implement all of the above (merged in P2-1 and P2-1-FIX-1). Reuse their classes and functions; do not rewrite or duplicate the theme.
+
+TASK P2-2 — Session state, backend switch, and steps 1–2. Log section: P2-2.
+
+Files to read: AGENTS.md, docs/data_contract.md, core/schema.py, core/fixtures.py, core/llm.py, core/interview.py, core/redflag.py (all read only), ui/theme.py, ui/components.py, ui/layout.py, app.py.
+Files you may change: ui/state.py (new), ui/backend.py (new), ui/handlers.py (new), ui/layout.py, ui/components.py, ui/theme.py (only to add classes for the new parts), tests/test_ui/test_handlers_steps12.py (new), tests/test_ui/test_components.py, docs/prompt_log_person2.md.
+
+Facts about the current code (checked on main):
+- core.fixtures provides FIXTURE_NAMES, FIXTURE_STORIES, get_fixture(name), get_summary(name) and match_story(story). get_fixture/get_summary return copies. Never use the FIXTURE_* record constants directly.
+- core.redflag.scan_text/check_alerts and core.interview.next_question/merge_answers, core.extract.extract_record and core.summarize.generate_summary may still raise NotImplementedError; Person 1 is implementing them. Tests must fake them; never edit core/.
+- core.llm.LLMError is the base of every model error (including LLMContentFilterError and ConfigError); its str() is a safe English message for the user.
+- Gradio 6.31.0: gr.update(...) exists; chain events with .click(...).then(...).
+
+Steps:
+1. ui/state.py: new_state() -> dict with step=1, story="", details={}, alert_texts=[], alerts=[], alerts_error=False, record=None, asked=[], skipped=[], question=None, summary=None, pdf_path=None, error=None, busy=False, token=0. bump(state) returns a copy with token + 1. The state holds only plain JSON-like data: record as record_to_dict(...), alerts as dicts {"code","message","level"}, asked as dicts {"question","answer"}, summary as a dict. Convert to dataclasses only when calling core or components.
+2. ui/backend.py: PREVIEW = os.environ.get("VISITPREP_PREVIEW") == "1", decided once at import. DEFAULT_PREVIEW_FIXTURE = "chest_pain".
+   extract(story, details) -> PatientRecord. Preview: name = match_story(story) or DEFAULT_PREVIEW_FIXTURE; record = get_fixture(name); then apply details exactly like the contract says for extract_record (patient_age, patient_age_text, patient_sex from details override when not None) and return recompute_missing_information(record). Real: core.extract.extract_record(story, details).
+   merge(record, asked) -> PatientRecord. Preview: return a copy of record unchanged. Real: core.interview.merge_answers(record, asked).
+   summarize(record, asked, story) -> SummaryOutput. Preview: get_summary(match_story(story) or DEFAULT_PREVIEW_FIXTURE). Real: core.summarize.generate_summary(record, asked).
+   Alerts and next_question are NOT in backend: handlers always call core.redflag and core.interview.next_question directly, in both modes. No try/except in backend.py.
+3. ui/handlers.py, plain functions (no gradio import), each returns a NEW state dict and never mutates its input:
+   - recompute_alerts(state): alerts = scan_text(*alert_texts) + (check_alerts(record) if record), dedup by code keeping the first, urgent first then by code. This is the only place where a broad `except Exception` is allowed, because the failure is shown: keep the previous alerts and set alerts_error True. On success set alerts_error False.
+   - on_continue(state, story, age_text, sex): strip story; empty → error "Please describe your symptoms first." Else: details from the form (age_text "" or not a whole number 0–130 → patient_age None; patient_age_text = stripped age_text or None; sex None when not chosen), store story, alert_texts=[story], run recompute_alerts BEFORE extract, then backend.extract. On LLMError: keep story, details and alerts, error = str(err) + " Your text is kept. Press Continue to try again.", stay on step 1. On success: store record, question = next_question(record, asked, skipped), step 2 (or step 3 when question is None), error None.
+   - on_answer(state, answer): empty after strip → error "Type an answer, or press Skip this question." Else append {"question","answer"} to asked and the answer to alert_texts, recompute_alerts, then the next question; None → step 3.
+   - on_skip(state): append the current question to skipped, then the next question; None → step 3.
+   - on_finish(state): go to step 3 (merge happens in task P2-3, not here).
+   - append_chip(text, chip) -> str: "" → chip; text ending with "." → text + "\n" + chip; otherwise text + " " + chip. Never replaces text.
+   - Every handler returns the state unchanged when called from the wrong step, and clears error on success.
+4. ui/components.py: add pips_html(answered: int, skipped_positions: list[int], current: int) for the five pips (answered filled --vp-primary, skipped dashed border, current --vp-tint with a --vp-primary border, upcoming empty with --vp-input-border), answers_list_html(asked) (escaped), question_heading_html(n) "Question N of 5". Alerts from state dicts become Alert objects before alerts_html. When alerts_error is True, show alerts_error_html("We could not check your answers for warning signs. If you feel very unwell, call 119.") in the alert area.
+5. ui/layout.py, wiring only:
+   Step 1: h1 "What's bothering you today?", line "Write it the way you'd tell a friend. We'll turn it into a clear note for your doctor.", textarea "Your symptoms" (at least 5 lines), chips "It started…", "It feels…", "I take…" as small secondary buttons that call append_chip, textbox "Age, if you want to share it", gr.Radio "Sex" with choices Female/Male/Other/Prefer not to say mapped to female/male/other/not-specified, no default value, styled as four buttons; primary "Continue".
+   Step 2: question heading, pips, the question text at 23px bold, textarea "Your answer", primary "Save answer", secondary "Skip this question", link-style "I'm done, check my details", the note "Skipping still uses one of the five questions.", and a closed gr.Accordion "Your answers so far (N)".
+   Step 3 and 4 stay placeholders (task P2-3).
+   The preview banner shows on every step only when backend.PREVIEW is True.
+   Progress line, rail and alert area update on every handler.
+   While a handler that calls the backend runs, every button of that step is disabled and the primary button reads "Working… this can take up to a minute"; chain: an update that disables → the handler → an update that re-enables (also after an error).
+   Exactly one primary button per step.
+
+Acceptance criteria:
+AC1. Handler tests with a faked backend and faked core functions (monkeypatch): recompute_alerts runs before extract (assert call order); extract raising LLMNetworkError keeps story and alerts, sets the error ending with "Press Continue to try again." and stays on step 1; 3 answers + 2 skips → step 3 and next_question not called a sixth time; empty answer sets the error; wrong-step calls return the state unchanged; sex None when not chosen; age "" → patient_age None and patient_age_text None; age "34" → 34 and "34"; handlers never mutate the input state (compare a deepcopy).
+AC2. Test: recompute_alerts keeps previous alerts and sets alerts_error True when check_alerts raises; scan_text and check_alerts both returning the same code gives one alert.
+AC3. Test: append_chip appends and never replaces (the three cases).
+AC4. Backend tests with PREVIEW forced True: each FIXTURE_STORIES text (also with extra spaces) gives that fixture's complaint; an unknown story gives the chest_pain fixture; details age 40 overrides the fixture age; mutating the returned record does not change the next extract result; summarize returns the matching get_summary.
+AC5. `grep -rn -i "breath\|chest\|faint\|seizure" ui/ --exclude=backend.py` is empty, and in ui/backend.py the word "chest" appears only in the line DEFAULT_PREVIEW_FIXTURE = "chest_pain".
+AC6. Manual with VISITPREP_PREVIEW=1 on port 7861 at 375px and 1280px: paste the child_cough story, press Continue. Report: the alert area content, whether step 2 appears, the first question, and each step's single primary button label. If core.interview.next_question or core.redflag still raise NotImplementedError, report exactly what the screen shows and mark the affected part NOT RUN; do not work around it.
+AC7. `python -m pytest -q` passes; report the count.
+AC8. `git status --short` shows only files from "Files you may change".
+```
