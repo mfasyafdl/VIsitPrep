@@ -14,10 +14,6 @@ STUB_CALLS = [
         lambda: extract.extract_record("a short story"), id="extract.extract_record"
     ),
     pytest.param(
-        lambda: interview.next_question(empty_record(), [], []),
-        id="interview.next_question",
-    ),
-    pytest.param(
         lambda: interview.merge_answers(empty_record(), []),
         id="interview.merge_answers",
     ),

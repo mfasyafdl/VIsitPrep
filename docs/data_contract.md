@@ -165,3 +165,43 @@ All people and details in core/fixtures.py are fictional. The module defines:
 - `match_story(story: str) -> str | None` — exact match after stripping and collapsing all runs of whitespace to one space; no fuzzy matching
 
 UI code uses get_fixture and get_summary (copies), never the module constants directly.
+
+## Follow-up questions (rule-based)
+
+`PRIORITY_FIELDS = ("severity", "onset", "duration", "medicines", "allergies", "medical_history", "age", "sex", "concerns")`
+
+Questions asked when the patient reports about themself (`reporting_on_behalf` is false or null):
+
+| Field | Question |
+| --- | --- |
+| severity | How bad is it: mild, moderate or severe? |
+| onset | When did it start? |
+| duration | How long has it been going on? |
+| medicines | Are you taking any medicines, herbal remedies or supplements? Please name them. |
+| allergies | Do you have any allergies? |
+| medical_history | Do you have any ongoing or past health conditions? |
+| age | How old are you? |
+| sex | What is your sex? |
+| concerns | Is there anything you are worried about or want to ask the doctor? |
+
+Questions asked when the reporter answers on behalf of the patient (`reporting_on_behalf` is true):
+
+| Field | Question |
+| --- | --- |
+| severity | How bad is it: mild, moderate or severe? |
+| onset | When did it start? |
+| duration | How long has it been going on? |
+| medicines | Is the patient taking any medicines, herbal remedies or supplements? Please name them. |
+| allergies | Does the patient have any allergies? |
+| medical_history | Does the patient have any ongoing or past health conditions? |
+| age | How old is the patient? |
+| sex | What is the patient's sex? |
+| concerns | Is there anything you are worried about or want to ask the doctor? |
+
+Rules:
+
+- `next_question` returns None when `max_questions` is 0 or less, or when the number of asked questions plus skipped questions is already at least `max_questions`.
+- The question table is chosen by `reporting_on_behalf`: true selects the on-behalf table; null or false selects the self table.
+- A field counts as missing using the same rules as `missing_information` (recomputed with `missing_fields`, never read from `record.missing_information`, which may be stale).
+- Walking `PRIORITY_FIELDS` in order, the question of the first missing field is returned, unless that question has already been asked or skipped. A question counts as already asked or skipped when its text equals the text of an asked or skipped question after lowercasing and trimming.
+- When no missing field is left, `next_question` returns None.
