@@ -2,13 +2,10 @@
 
 import pytest
 
-from core import extract, interview, llm, summarize
+from core import interview, llm, summarize
 from core.schema import empty_record
 
 STUB_CALLS = [
-    pytest.param(
-        lambda: extract.extract_record("a short story"), id="extract.extract_record"
-    ),
     pytest.param(
         lambda: interview.merge_answers(empty_record(), []),
         id="interview.merge_answers",

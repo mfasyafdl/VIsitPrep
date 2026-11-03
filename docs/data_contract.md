@@ -234,3 +234,21 @@ Record-only rules: `check_alerts` adds infant_fever (urgent) when patient_age is
 Sources: Kemenkes RI danger signs (https://www.kemkes.go.id/), PSC 119 (https://psc119.kemkes.go.id/), IDAI child danger signs (https://www.idai.or.id/), WHO IMCI danger signs (https://www.who.int/).
 
 Alerts are a safety prompt based on fixed rules, not a diagnosis.
+
+## Extraction (core.extract)
+
+The story is sent to the model inside `<patient_report>` tags after removing any such tags from it (case-insensitive, optional spaces inside the brackets); nothing else goes into the user message. details are applied after the model call and are never sent to the model; only patient_age, patient_age_text and patient_sex from details override the extracted values, and a null detail does not override.
+
+`_normalize` repairs the model's JSON before `record_from_dict` runs. It is pure (never mutates its input) and returns a full record dict (all 20 keys, `missing_information = []`) plus a list of English problems:
+
+- A `RECORD_KEYS` key that is absent becomes the problem "missing key: <name>". Unknown extra keys and a `missing_information` key from the model are dropped.
+- Optional text fields (patient_age_text, reporter_relationship, complaint, onset, duration, severity_note and the medicine fields dose, frequency, duration, notes) are stripped; "" and the values "null", "none", "unknown", "n/a", "not given", "not stated" (case-insensitive) become null. A non-string, non-null value becomes the problem "<name> must be a string or null".
+- patient_age stays a whole number of years 0–130; a float with no fraction or a string of digits becomes an int in that range; anything else becomes null.
+- patient_sex is stripped and lowercased; kept only when it is one of SEX_VALUES, otherwise null.
+- severity is stripped and lowercased; kept only when it is one of SEVERITY_LEVELS. Any other non-empty text becomes null for severity and, when severity_note is null, fills severity_note with the original stripped text.
+- Boolean fields (reporting_on_behalf, the *_denied flags, pregnant) keep true or false; anything else becomes null.
+- Text lists (symptoms, allergies, medical_history, concerns): null becomes []; a single string becomes a one-item list; items are stripped and empty items dropped; a non-string item becomes the problem "<name> must be a list of strings".
+- medicines: null becomes []; a string item becomes a medicine with that name and medicine_type "unknown"; a dict item keeps only the six medicine keys (missing ones null); an item whose name is missing or empty after stripping is dropped; a medicine_type outside MEDICINE_TYPES becomes "unknown"; any other item type becomes the problem "medicines must be a list of objects".
+- A *_denied flag that is true while its list is non-empty becomes null (the named items win; no fact is lost).
+
+The problems go through chat_json's one repair attempt: the model is asked once to fix the listed problems, and a second invalid answer raises LLMResponseError. When there are no problems, the normalized dict is built into a PatientRecord with record_from_dict and its missing_information is recomputed.
