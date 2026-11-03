@@ -249,7 +249,7 @@ The story is sent to the model inside `<patient_report>` tags after removing any
 - severity is stripped and lowercased; kept only when it is one of SEVERITY_LEVELS. Any other non-empty text becomes null for severity and, when severity_note is null, fills severity_note with the original stripped text.
 - Boolean fields (reporting_on_behalf, the *_denied flags, pregnant) keep true or false; anything else becomes null.
 - Text lists (symptoms, allergies, medical_history, concerns): null becomes []; a single string becomes a one-item list; items are stripped and empty items dropped; a non-string item becomes the problem "<name> must be a list of strings".
-- medicines: null becomes []; a string item becomes a medicine with that name and medicine_type "unknown"; a dict item keeps only the six medicine keys (missing ones null); an item whose name is missing or empty after stripping is dropped; a medicine_type outside MEDICINE_TYPES becomes "unknown"; any other item type becomes the problem "medicines must be a list of objects".
+- medicines: null becomes []; a string item becomes a medicine with that name and medicine_type "unknown"; a dict item keeps only the six medicine keys (missing ones null); an item whose name is missing or empty after stripping is dropped; medicine_type is stripped, lowercased and its spaces replaced by "-"; anything still outside MEDICINE_TYPES becomes "unknown"; any other item type becomes the problem "medicines must be a list of objects".
 - A *_denied flag that is true while its list is non-empty becomes null (the named items win; no fact is lost).
 
 The problems go through chat_json's one repair attempt: the model is asked once to fix the listed problems, and a second invalid answer raises LLMResponseError. When there are no problems, the normalized dict is built into a PatientRecord with record_from_dict and its missing_information is recomputed.
@@ -269,3 +269,30 @@ Fact-loss guard (deterministic; text compared with casefold and strip):
 - medicines_denied, allergies_denied and medical_history_denied that were true stay true, unless the matching list is now non-empty (then null is allowed), else "keep <flag>: it was true before".
 
 A changed value is allowed; a removed fact is rejected and repaired once. LLM errors propagate unchanged, and the record and the asked list are never mutated.
+
+## Summary (core.summarize)
+
+`generate_summary(record, asked)` produces the SummaryOutput with one model call. The doctor card is built by `build_doctor_card(record)` in code, never by the model, so it can never invent, drop or reword a fact. The model writes only `patient_script` and `priority_questions`. `asked` is not sent to the model; the record already holds the merged answers.
+
+The doctor card is exactly 10 lines joined with a newline, each "<Label>: <value>", in this order. "Not given" is the value for anything unknown. A list whose `*_denied` flag is true and that is empty shows "None (patient confirms)".
+
+- Patient: the age (patient_age_text, or str(patient_age) when the text is null) and patient_sex, joined with ", ", leaving out the ones that are null. When reporting_on_behalf is true, " (reported by <possessive> <reporter_relationship>)" is added, where the possessive is "his" for male, "her" for female, otherwise "the patient's"; when reporter_relationship is null, " (reported by someone else)" is added instead. When nothing is known the value is "Not given", and no leading space is added.
+- Problem: the complaint in double quotes followed by " (patient's own words)".
+- Started: onset.
+- Duration: duration.
+- Severity: the severity with the severity_note in double quotes in parentheses when both are known; just the severity; the note in double quotes when only the note is known.
+- Symptoms: the items joined with "; ".
+- Medicines: one entry per medicine, joined with "; ": the name, then " (<medicine_type>)" unless the type is "unknown", then ", " plus the known values of dose, frequency and duration in that order, joined with ", ".
+- Allergies: the items joined with "; ".
+- Medical history: the items joined with "; ".
+- Patient's concerns: each concern in double quotes, joined with "; ", followed by " (patient's own words)".
+
+Message format: the user message is the opening `<current_record>` tag, a newline, the record as JSON (`record_to_dict` without the `missing_information` key, `ensure_ascii=False`, indent 2) with every `<current_record>`, `</current_record>`, `<patient_report>` and `</patient_report>` (case-insensitive, optional spaces inside the brackets) removed from the JSON text, a newline and the closing tag. Nothing else goes into the message; the system message is SUMMARY_SYSTEM.
+
+Validation problems (the rejected answer goes through chat_json's one repair attempt; a second rejection raises LLMResponseError):
+
+- patient_script missing or not a string → "patient_script must be a string"; after stripping, fewer than 5 or more than 120 words → "patient_script must have 5 to 120 words".
+- priority_questions missing or not a list → "priority_questions must be a list of strings"; a non-string item gives the same problem; after stripping and dropping empty items, 0 items → "priority_questions must have 1 to 3 questions"; an item that does not end with "?" → "each priority question must end with ?".
+- Extra keys are ignored. More than 3 valid questions is not a problem; the first 3 are kept.
+
+The returned SummaryOutput has the code-built doctor_card, the stripped patient_script and the stripped, non-empty first 3 questions. LLM errors propagate unchanged, and the record and the asked list are never mutated.
