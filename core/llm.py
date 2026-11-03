@@ -165,6 +165,7 @@ def chat_json(
     timeout: float = 120.0,
     max_retries: int = 2,
     max_repairs: int = 1,
+    thinking: bool = False,
 ) -> dict:
     if not (0 < timeout <= 600):
         raise ValueError("timeout must be greater than 0 and at most 600 seconds")
@@ -205,9 +206,19 @@ def chat_json(
 
     messages = list(base_payload["messages"])
     resent_without_format = False
+    thinking_dropped = False
     repairs_used = 0
-    payload = dict(base_payload)
-    payload["response_format"] = {"type": "json_object"}
+
+    def build_payload() -> dict:
+        payload = dict(base_payload)
+        payload["messages"] = messages
+        if not resent_without_format:
+            payload["response_format"] = {"type": "json_object"}
+        if not thinking and not thinking_dropped:
+            payload["enable_thinking"] = False
+        return payload
+
+    payload = build_payload()
     while True:
         status, body = post_with_retries(payload)
 
@@ -246,10 +257,7 @@ def chat_json(
                     ),
                 },
             ]
-            payload = dict(base_payload)
-            payload["messages"] = messages
-            if not resent_without_format:
-                payload["response_format"] = {"type": "json_object"}
+            payload = build_payload()
             continue
 
         lowered = body.lower()
@@ -261,8 +269,11 @@ def chat_json(
                 raise LLMContentFilterError(_CONTENT_FILTERED) from None
             if "response_format" in lowered and not resent_without_format:
                 resent_without_format = True
-                payload = dict(base_payload)
-                payload["messages"] = messages
+                payload = build_payload()
+                continue
+            if "enable_thinking" in lowered and not thinking and not thinking_dropped:
+                thinking_dropped = True
+                payload = build_payload()
                 continue
             raise LLMResponseError(_UNREADABLE_ANSWER) from None
         if status in (401, 403):

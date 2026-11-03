@@ -118,7 +118,7 @@ All in core/, exact signatures:
 
 ```
 core.llm.load_config() -> LLMConfig
-core.llm.chat_json(system: str, user: str, *, validate: Callable[[dict], list[str]], config: LLMConfig | None = None, max_tokens: int = 4000, timeout: float = 120.0, max_retries: int = 2, max_repairs: int = 1) -> dict
+core.llm.chat_json(system: str, user: str, *, validate: Callable[[dict], list[str]], config: LLMConfig | None = None, max_tokens: int = 4000, timeout: float = 120.0, max_retries: int = 2, max_repairs: int = 1, thinking: bool = False) -> dict
 core.redflag.scan_text(*texts: str) -> list[Alert]                  # rule-based, no network
 core.redflag.check_alerts(record: PatientRecord) -> list[Alert]     # rule-based, no network
 core.extract.extract_record(story: str, details: dict | None = None, *, config: LLMConfig | None = None) -> PatientRecord
@@ -133,6 +133,7 @@ core.summarize.generate_summary(record: PatientRecord, asked: list[QuestionAnswe
 ## Errors (core.llm)
 
 LLMError base, with ConfigError, LLMAuthError, LLMQuotaError, LLMNetworkError, LLMServerError, LLMResponseError and LLMContentFilterError (the provider's content filter rejected the text). Each has a safe English message with no API key and no patient text. On any error the caller's inputs are unchanged.
+By default chat_json sends enable_thinking: false; if the provider rejects that parameter with HTTP 400, the call is sent once more without it.
 
 ## Alerts
 

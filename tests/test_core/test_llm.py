@@ -422,3 +422,95 @@ def test_incomplete_read_three_times_raises_network_error(fakes):
     assert str(exc.value) == "The AI service did not respond."
     assert len(post.calls) == 3
     assert sleep.delays == [0.5, 1.0]
+
+
+def test_default_call_sends_enable_thinking_false_on_first_and_repair_requests(fakes):
+    post, _ = fakes
+    post.results = [
+        (200, ok_body("this is not json")),
+        (200, ok_body('{"ok": true}')),
+    ]
+    data = llm.chat_json("SYS", "USR", validate=lambda d: [], config=CONFIG)
+    assert data == {"ok": True}
+    assert len(post.calls) == 2
+    assert post.calls[0]["payload"]["enable_thinking"] is False
+    assert post.calls[1]["payload"]["enable_thinking"] is False
+
+
+def test_thinking_true_never_sends_enable_thinking_key(fakes):
+    post, _ = fakes
+    post.results = [
+        (200, ok_body("this is not json")),
+        (200, ok_body('{"ok": true}')),
+    ]
+    data = llm.chat_json(
+        "SYS", "USR", validate=lambda d: [], config=CONFIG, thinking=True
+    )
+    assert data == {"ok": True}
+    assert len(post.calls) == 2
+    for call in post.calls:
+        assert "enable_thinking" not in call["payload"]
+
+
+def test_enable_thinking_400_resends_once_without_key(fakes):
+    post, sleep = fakes
+    post.results = [
+        (400, json.dumps({"error": {"message": "unknown parameter enable_thinking"}})),
+        (200, ok_body('{"ok": true}')),
+    ]
+    data = llm.chat_json("SYS", "USR", validate=lambda d: [], config=CONFIG)
+    assert data == {"ok": True}
+    assert len(post.calls) == 2
+    assert post.calls[0]["payload"]["enable_thinking"] is False
+    assert "enable_thinking" not in post.calls[1]["payload"]
+    assert sleep.delays == []
+
+
+def test_enable_thinking_400_twice_raises_response_error(fakes):
+    post, _ = fakes
+    body = json.dumps({"error": {"message": "unknown parameter enable_thinking"}})
+    post.results = [(400, body), (400, body)]
+    with pytest.raises(llm.LLMResponseError) as exc:
+        llm.chat_json("SYS", "USR", validate=lambda d: [], config=CONFIG)
+    assert str(exc.value) == (
+        "The AI service returned an answer we could not read. Please try again."
+    )
+    assert len(post.calls) == 2
+
+
+def test_response_format_then_enable_thinking_400_drops_both_keys(fakes):
+    post, sleep = fakes
+    post.results = [
+        (400, json.dumps({"error": {"message": "response_format is not supported"}})),
+        (400, json.dumps({"error": {"message": "unknown parameter enable_thinking"}})),
+        (200, ok_body('{"ok": true}')),
+    ]
+    data = llm.chat_json("SYS", "USR", validate=lambda d: [], config=CONFIG)
+    assert data == {"ok": True}
+    assert len(post.calls) == 3
+    last = post.calls[2]["payload"]
+    assert "response_format" not in last
+    assert "enable_thinking" not in last
+    assert sleep.delays == []
+
+
+@pytest.mark.parametrize("thinking", [True, False])
+def test_content_filter_400_still_one_call_with_thinking_on_or_off(fakes, thinking):
+    post, sleep = fakes
+    body = json.dumps(
+        {
+            "code": "DataInspectionFailed",
+            "message": "Output data may contain inappropriate content.",
+        }
+    )
+    post.results = [(400, body)]
+    with pytest.raises(llm.LLMContentFilterError) as exc:
+        llm.chat_json(
+            "SYS", "USR", validate=lambda d: [], config=CONFIG, thinking=thinking
+        )
+    assert str(exc.value) == (
+        "The AI service could not process this text. Please describe your "
+        "symptoms in plain, simple words and try again."
+    )
+    assert len(post.calls) == 1
+    assert sleep.delays == []
