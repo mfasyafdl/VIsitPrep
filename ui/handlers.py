@@ -11,6 +11,7 @@ in every case the failure is shown to the user.
 
 import copy
 import logging
+import re
 
 from core import interview
 from core import redflag
@@ -119,11 +120,61 @@ def _next_question(record, asked, skipped) -> str | None:
     )
 
 
+_CHIP_PHRASES = ("It started", "It feels", "I take")
+
+
+def strip_unfinished_chips(text: str) -> str:
+    """Drop chip phrases the patient never finished, then tidy the lines.
+
+    A chip is one of the chip phrases followed by "…" or "...". It is
+    finished when the text after it on the same line, up to the next
+    chip phrase or the end of the line, holds a non-space character.
+    Unfinished chips are removed; runs of spaces or tabs collapse to
+    one space, each line is stripped and lines that became empty are
+    dropped. Nothing else changes.
+    """
+    lines = []
+    for line in (text or "").split("\n"):
+        chips = []
+        for phrase in _CHIP_PHRASES:
+            start = 0
+            while True:
+                idx = line.find(phrase, start)
+                if idx == -1:
+                    break
+                end = idx + len(phrase)
+                if line[end : end + 1] == "…":
+                    chips.append((idx, end + 1))
+                    start = end + 1
+                elif line[end : end + 3] == "...":
+                    chips.append((idx, end + 3))
+                    start = end + 3
+                else:
+                    start = idx + 1
+        chips.sort()
+        remove = []
+        for start, end in chips:
+            boundary = len(line)
+            for phrase in _CHIP_PHRASES:
+                idx = line.find(phrase, end)
+                if idx != -1 and idx < boundary:
+                    boundary = idx
+            if all(char in " \t" for char in line[end:boundary]):
+                remove.append((start, end))
+        cleaned = line
+        for start, end in sorted(remove, reverse=True):
+            cleaned = cleaned[:start] + cleaned[end:]
+        cleaned = re.sub(r"[ \t]+", " ", cleaned).strip()
+        if cleaned:
+            lines.append(cleaned)
+    return "\n".join(lines)
+
+
 def on_continue(state: dict, story, age_text, sex) -> dict:
     """Step 1: store the story, check alerts, extract the record."""
     if state["step"] != 1:
         return state
-    text = (story or "").strip()
+    text = strip_unfinished_chips((story or "")).strip()
     if not text:
         result = dict(state)
         result["error"] = "Please describe your symptoms first."

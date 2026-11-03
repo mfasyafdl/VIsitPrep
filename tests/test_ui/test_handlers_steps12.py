@@ -6,6 +6,8 @@ ui.backend are faked with monkeypatch; no network is used.
 
 import copy
 
+import pytest
+
 from core import fixtures
 from core.llm import LLMNetworkError
 from core.schema import Alert, record_to_dict
@@ -361,6 +363,64 @@ def test_append_chip_never_replaces_text():
     text2 = "I am tired"
     result2 = handlers.append_chip(text2, "It feels…")
     assert result2.startswith(text2)
+
+
+# P2-5-FIX-1
+
+
+@pytest.mark.parametrize(
+    ("story", "expected"),
+    [
+        ("I have chest pain. It started…", "I have chest pain."),
+        ("It started… two days ago", "It started… two days ago"),
+        ("It started… It feels… sharp", "It feels… sharp"),
+        ("It started…\nI take…", ""),
+        ("I take… nothing", "I take… nothing"),
+        ("My knee hurts It started... ", "My knee hurts"),
+        ("Cough.\nIt feels…\nI take… ginger tea", "Cough.\nI take… ginger tea"),
+    ],
+)
+def test_strip_unfinished_chips(story, expected):
+    assert handlers.strip_unfinished_chips(story) == expected
+
+
+def test_on_continue_strips_unfinished_chip_before_extract(monkeypatch):
+    record = fixtures.get_fixture("fever_adult")
+    seen = []
+
+    def fake_extract(story, details):
+        seen.append(story)
+        return record
+
+    monkeypatch.setattr("ui.backend.extract", fake_extract)
+    _fake_redflag(monkeypatch, [])
+    server = QuestionServer(["Q1"])
+    monkeypatch.setattr("core.interview.next_question", server)
+    result = handlers.on_continue(
+        _step1_state(), "I have a cough. It started…", "", None
+    )
+    assert seen == ["I have a cough."]
+    assert result["story"] == "I have a cough."
+    assert result["alert_texts"] == ["I have a cough."]
+    assert result["step"] == 2
+    assert result["error"] is None
+
+
+def test_on_continue_unfinished_chip_alone_sets_empty_error(monkeypatch):
+    _fake_redflag(monkeypatch, [])
+    extract_calls = []
+    monkeypatch.setattr(
+        "ui.backend.extract",
+        lambda story, details: extract_calls.append(story),
+    )
+    server = QuestionServer(["Q1"])
+    monkeypatch.setattr("core.interview.next_question", server)
+    result = handlers.on_continue(_step1_state(), "It started…", "", None)
+    assert result["error"] == "Please describe your symptoms first."
+    assert result["step"] == 1
+    assert result["story"] == ""
+    assert extract_calls == []
+    assert server.calls == 0
 
 
 # AC4
