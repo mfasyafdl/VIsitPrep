@@ -4,9 +4,9 @@ Plain functions that take the session state dict plus inputs and
 return a new state dict. They never mutate their input and never
 import gradio. Alerts come only from core.redflag, questions only
 from core.interview, and the model calls only through ui.backend.
-The only broad except Exception is in recompute_alerts and in the
-three model steps (on_continue, enter_review and on_summarize);
-in every case the failure is shown to the user.
+The only broad except Exception is in recompute_alerts, in the
+three model steps (on_continue, enter_review and on_summarize) and
+in make_pdf; in every case the failure is shown to the user.
 """
 
 import copy
@@ -27,6 +27,7 @@ from core.schema import (
 )
 
 import ui.backend as backend
+import ui.export_pdf as export_pdf
 from ui.state import bump, new_state
 
 _MAX_QUESTIONS = 5
@@ -40,6 +41,8 @@ _MODEL_STEP_FAILED = (
     "Something went wrong on our side. Your information is kept. "
     "Please try again."
 )
+
+PDF_FAILED = "The PDF could not be created. You can still copy the note above."
 
 
 def _llm_error_text(err: LLMError, kept: str, retry: str | None) -> str:
@@ -529,6 +532,8 @@ def save_section(state: dict, section: str, values: dict) -> dict:
         or state["editing"] != section
     ):
         return state
+    if state["pdf_path"] is not None:
+        export_pdf.remove_pdf(state["pdf_path"])
     data = copy.deepcopy(state["record"])
     new_texts = _apply_section(data, section, values)
     if new_texts is None:
@@ -597,10 +602,35 @@ def on_summarize(state: dict) -> dict:
     return bump(result)
 
 
+def make_pdf(state: dict) -> dict:
+    """Step 4: build the visit note PDF, once per summary."""
+    if (
+        state["step"] != 4
+        or state["summary"] is None
+        or state["pdf_path"] is not None
+    ):
+        return state
+    result = dict(state)
+    try:
+        export_pdf.cleanup_old_exports()
+        path = export_pdf.build_pdf(
+            state["summary"],
+            state["alerts"],
+            export_pdf.new_session_dir(),
+        )
+    except Exception:
+        logging.getLogger("visitprep").exception("pdf failed")
+        result["error"] = PDF_FAILED
+        return bump(result)
+    result["pdf_path"] = str(path)
+    return bump(result)
+
+
 def on_change_details(state: dict) -> dict:
     """Step 4: go back to step 3 without running the merge again."""
     if state["step"] != 4:
         return state
+    export_pdf.remove_pdf(state["pdf_path"])
     result = dict(state)
     result["step"] = 3
     result["summary"] = None
@@ -612,6 +642,7 @@ def on_change_details(state: dict) -> dict:
 
 def on_reset(state: dict) -> dict:
     """Any step: a fresh session state."""
+    export_pdf.remove_pdf(state["pdf_path"])
     return new_state()
 
 
