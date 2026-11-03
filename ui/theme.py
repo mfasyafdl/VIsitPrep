@@ -557,4 +557,64 @@ body {{
   margin: 0;
   color: var(--vp-ink-2);
 }}
+
+/* Step 3: detail rows, Add/Change buttons, section editors. */
+#vp-root .vp-detail {{
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}}
+
+#vp-root .vp-detail .html-container {{
+  flex: 1 1 auto;
+  min-width: 0;
+}}
+
+#vp-root .vp-detail-row {{
+  min-width: 0;
+}}
+
+#vp-root .vp-detail-label {{
+  margin: 0 0 4px;
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--vp-ink);
+}}
+
+#vp-root .vp-detail-line {{
+  margin: 0 0 4px;
+  font-size: 17px;
+  color: var(--vp-ink);
+  overflow-wrap: break-word;
+}}
+
+#vp-root .vp-detail-line:last-child {{
+  margin-bottom: 0;
+}}
+
+#vp-root .vp-detail-sub {{
+  font-weight: 600;
+  color: var(--vp-ink-2);
+}}
+
+#vp-root .vp-not-given {{
+  font-style: italic;
+  color: var(--vp-ink-2);
+}}
+
+#vp-root .vp-editor {{
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: var(--vp-tint);
+  color: var(--vp-on-tint);
+  border: 2px solid var(--vp-primary);
+  border-radius: 8px;
+  padding: 16px;
+}}
+
+#vp-root .vp-editor-actions {{
+  justify-content: flex-end;
+}}
 """

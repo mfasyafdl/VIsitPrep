@@ -5,9 +5,12 @@ from types import SimpleNamespace
 
 from ui.components import (
     ALERTS_ERROR_MESSAGE,
+    DETAIL_ROWS,
     answers_list_html,
     alerts_error_html,
     alerts_html,
+    change_label,
+    detail_row_html,
     footer_html,
     header_html,
     pips_html,
@@ -244,3 +247,149 @@ def test_alerts_error_message_text():
         == "We could not check your answers for warning signs. "
         "If you feel very unwell, call 119."
     )
+
+
+def _blank_record(**overrides) -> dict:
+    record = {
+        "complaint": None,
+        "symptoms": [],
+        "onset": None,
+        "duration": None,
+        "severity": None,
+        "severity_note": None,
+        "medicines": [],
+        "medicines_denied": None,
+        "allergies": [],
+        "allergies_denied": None,
+        "medical_history": [],
+        "medical_history_denied": None,
+        "concerns": [],
+        "patient_age": None,
+        "patient_age_text": None,
+        "patient_sex": None,
+        "reporting_on_behalf": None,
+        "reporter_relationship": None,
+    }
+    record.update(overrides)
+    return record
+
+
+def test_detail_rows_cover_the_seven_sections_in_order():
+    assert [section for section, _label in DETAIL_ROWS] == [
+        "problem",
+        "timing",
+        "medicines",
+        "allergies",
+        "history",
+        "concerns",
+        "about",
+    ]
+
+
+def test_detail_row_escapes_patient_text_in_every_field():
+    payload = "<img src=x onerror=alert(1)>"
+    record = _blank_record(
+        complaint=payload,
+        symptoms=[payload],
+        onset=payload,
+        duration="a & b",
+        severity="moderate",
+        severity_note=payload,
+        medicines=[{"name": payload, "frequency": payload}],
+        allergies=[payload],
+        medical_history=[payload],
+        concerns=[payload],
+        patient_age=34,
+        patient_age_text=payload,
+        patient_sex="female",
+    )
+    for section in [s for s, _l in DETAIL_ROWS]:
+        html_text = detail_row_html(record, section)
+        assert "<img" not in html_text
+        assert "&lt;img src=x onerror=alert(1)&gt;" in html_text
+
+
+def test_detail_row_shows_not_given_for_unknown_values():
+    record = _blank_record()
+    for section, _label in DETAIL_ROWS:
+        html_text = detail_row_html(record, section)
+        assert "Not given" in html_text
+        assert 'class="vp-not-given"' in html_text
+
+
+def test_detail_row_denied_list_shows_none_confirmed():
+    record = _blank_record(
+        medicines_denied=True,
+        allergies_denied=True,
+        medical_history_denied=True,
+    )
+    for section in ("medicines", "allergies", "history"):
+        html_text = detail_row_html(record, section)
+        assert "None (you confirmed)" in html_text
+        assert "Not given" not in html_text
+
+
+def test_detail_row_medicines_name_and_frequency():
+    record = _blank_record(
+        medicines=[
+            {"name": "ginger tea", "frequency": "twice a day"},
+            {"name": "honey", "frequency": None},
+        ]
+    )
+    html_text = detail_row_html(record, "medicines")
+    assert "ginger tea, twice a day" in html_text
+    assert ">honey<" in html_text
+
+
+def test_detail_row_severity_level_and_note_in_quotes():
+    record = _blank_record(
+        severity="mild", severity_note="He is still playing and eating."
+    )
+    html_text = detail_row_html(record, "timing")
+    assert 'mild "He is still playing and eating."' in html_text
+    assert "Started:" in html_text
+    assert "How long:" in html_text
+    assert "How bad:" in html_text
+
+
+def test_detail_row_about_reported_by_only_when_on_behalf():
+    on_behalf = _blank_record(
+        reporting_on_behalf=True, reporter_relationship="mother"
+    )
+    assert "Reported by: mother" in detail_row_html(on_behalf, "about")
+
+    not_on_behalf = _blank_record(
+        reporting_on_behalf=False, reporter_relationship="mother"
+    )
+    assert "Reported by:" not in detail_row_html(not_on_behalf, "about")
+
+    no_relationship = _blank_record(reporting_on_behalf=True)
+    assert "Reported by:" not in detail_row_html(no_relationship, "about")
+
+
+def test_detail_row_age_from_number_when_no_text():
+    record = _blank_record(patient_age=7)
+    html_text = detail_row_html(record, "about")
+    assert ">7<" in html_text
+
+
+def test_detail_row_unknown_section_raises():
+    import pytest
+
+    with pytest.raises(ValueError):
+        detail_row_html(_blank_record(), "nope")
+
+
+def test_change_label_add_when_blank_change_when_known():
+    blank = _blank_record()
+    for section, _label in DETAIL_ROWS:
+        assert change_label(blank, section) == "Add"
+    assert change_label(
+        _blank_record(complaint="a mild cough"), "problem"
+    ) == "Change"
+    assert change_label(
+        _blank_record(allergies_denied=True), "allergies"
+    ) == "Change"
+    assert change_label(
+        _blank_record(patient_age=7), "about"
+    ) == "Change"

@@ -370,3 +370,163 @@ AC3. Manual with VISITPREP_PREVIEW=1 on port 7861 at 375px: paste the child_coug
 AC4. Same setup, story "I have a headache.", Continue, answer the first question. Report the alert area text (must not mention chest pain).
 AC5. `git status --short` shows only files from "Files you may change".
 ```
+
+## P2-3a
+
+- Model: Qwen/Qwen3.8-27B
+- Date: 2026-11-03
+
+### Prompt (verbatim)
+
+```
+ROLE: You are the coding agent for Person 2 of VisitPrep, a new Python 3.10 + Gradio app, English only, that helps a patient prepare for a doctor visit. It organizes what the patient reports. It never diagnoses, never recommends treatment or medication changes.
+
+TEAM: Two people build this in parallel. Person 2 (you) owns app.py, ui/, tests/test_ui/, docs/deployment.md and docs/prompt_log_person2.md. Person 1 owns AGENTS.md, requirements*.txt, .gitignore, .env.example, docs/data_contract.md, core/, tests/test_core/, README.md and scripts/. Never edit Person 1's files, even to fix a bug; write a handoff with an exact reproduction instead. If you need a new dependency, ask for it in the handoff.
+
+BEFORE YOU WRITE CODE:
+1. Read AGENTS.md and docs/data_contract.md in full. Then read only the files listed under "Files to read" in the task.
+2. Write a short plan: the files you will change and one line per file on what changes. Then continue; do not wait for approval unless a rule below says stop.
+
+HARD RULES (breaking any of these means the task failed):
+- Only edit files listed under "Files you may change".
+- ui/ has no business logic. Alerts come only from core.redflag. Questions come only from core.interview. Summaries come only from core.summarize. Never reimplement any of them, and never write red-flag trigger words in ui/.
+- Event handlers live in ui/handlers.py as plain functions that take the session state dict plus inputs and return a new state dict; they never import gradio. ui/layout.py only builds components and wires events to those functions.
+- null means unknown. Never turn null into False, 0, "" or "none".
+- Escape every piece of patient text before it goes into gr.HTML or the PDF.
+- No catch-all `except Exception` that hides a failure. Show a visible English message instead.
+- Never print, log or hard-code MODELSCOPE_API_KEY. Tests never use the network.
+- Do not commit, push, merge or change git config. Do not touch any app I am running on port 7860; if you launch the app, use port 7861.
+- All user-facing text is English.
+
+WORK STYLE:
+- Do the steps in order. If one is impossible, say why in the report and continue with the next.
+- Make the smallest change that meets the acceptance criteria. No unrelated refactors.
+- After each file change, run `python -m pytest -q tests/test_ui` and fix failures before moving on. If the same command fails twice for a reason you cannot fix, stop and report the full error.
+- If something is ambiguous, ask me one specific question and stop.
+
+FINAL REPORT (use exactly these headings):
+## Plan vs done
+One line per planned item: DONE / PARTLY / NOT DONE, with file and function.
+## Acceptance criteria
+One line per criterion: PASS / FAIL / NOT RUN, with evidence (the command and the relevant output line, or what you saw).
+## Test results
+The exact last line of `python -m pytest -q`, with totals for tests/test_core and tests/test_ui.
+## Not verified
+Anything you did not check, and why. Never write "should work". If you did not run it, write NOT RUN.
+## Handoff for Person 1
+Exact reproductions or requests (file, function, input, expected, actual), or "None".
+## prompt_log
+Confirm you appended this whole prompt verbatim (Block A2, any extra block, and the task card, exactly as pasted) to docs/prompt_log_person2.md under the section id in the task title, with the model name "Qwen/Qwen3.8-27B", and that earlier sections are unchanged.
+
+DESIGN RULES v2 (exact values from the approved UI preview; do not invent other colours or sizes):
+
+Colour tokens: define each once as a CSS custom property on #vp-root (light values), and override them under `.dark #vp-root` (Gradio's dark class). Dark tokens come ONLY from the .dark class; never add a @media (prefers-color-scheme) block (Gradio already sets .dark in system mode, and the media block breaks ?__theme=light). --vp-ground and --vp-ink are also defined on :root and .dark so the page body uses the ground colour. No hard-coded hex anywhere else. Every rule that sets a background also sets color.
+  token                    light      dark
+  --vp-ground              #EEF4F2    #0E1A1C
+  --vp-surface             #FFFFFF    #16252A
+  --vp-ink                 #15232A    #E3EEEC
+  --vp-ink-2               #44565E    #AFC2C1
+  --vp-primary             #0B6B60    #4FC1B1
+  --vp-on-primary          #FFFFFF    #052421
+  --vp-pressed-edge        #06443D    #2E8C80
+  --vp-tint                #DCEEEA    #1D3A3A
+  --vp-on-tint             #0B4F47    #BDEDE5
+  --vp-input-border        #6B7F84    #6F8A8D   (2px)
+  --vp-hairline            #D3E0DD    #27393D
+  --vp-urgent-band         #C42B1C    #C42B1C   (band text #FFFFFF in both)
+  --vp-urgent-card-border  #C42B1C    #FF8A7A
+  --vp-attn-band           #FFD84D    #FFD84D   (band text #15232A in both)
+  Focus on every button, input, chip and link: outline 4px solid #FFD84D plus an inner 2px edge in --vp-ink (box-shadow inset).
+  Header bar: --vp-primary background with --vp-on-primary text in light mode; --vp-surface with --vp-ink text in dark mode.
+
+Type: "Atkinson Hyperlegible Next" from Google Fonts (weights 400, 600, 700, 800), fallback system-ui, sans-serif. Body 17px, helper text 15px, h1 26px below 1024px and 34px from 1024px. Inputs at least 17px.
+
+Buttons: 52px tall, radius 8px. Primary: filled --vp-primary, text --vp-on-primary, 4px bottom edge in --vp-pressed-edge (box-shadow 0 4px 0) that disappears while pressed (translateY 2px). Secondary: --vp-surface background, 2px --vp-primary border, --vp-primary text. Link-style: no background, underlined --vp-primary text, at least 44px tall. Exactly one primary button per step.
+
+Alerts are care cards: a coloured band whose heading names the action, then a body on --vp-surface.
+  Urgent: band --vp-urgent-band, an h2 heading "Get medical help now" that starts with a visually hidden "Urgent advice:" (class vp-sr-only). Card border 2px --vp-urgent-card-border. Body = core's alert message verbatim, escaped. Exactly one "Call 119" link with href="tel:119" styled as a button (class vp-btn-call: --vp-urgent-band background, white text, 52px, radius 8px, full width below 1024px) inside the card body.
+  Attention: band --vp-attn-band, heading "Tell your doctor about this", hidden "Attention:", body verbatim, no call button.
+  Container: always rendered; role="alert" when any urgent alert is present, otherwise aria-live="polite". With no alerts it is an empty container with no height and never says "no alerts" or "you are safe".
+
+Errors use --vp-surface with a 2px --vp-ink-2 border, never urgent red.
+
+Page order on every step: header bar (brand "VisitPrep" left, "Start over" link-style right) → alert area → "**Step N of 4**, <label>" with a 4-segment progress bar (labels: describe your symptoms / a few questions / check your details / your summary) → step content → action buttons → footer.
+Full-bleed page: no Gradio padding around #vp-root; 16px side padding below 1024px, 24px from 1024px.
+Footer text: "Before you type: your notes are sent to ModelScope to be organized. Leave out your name, address and phone number. The provider doesn't promise to delete them, and closing this tab doesn't delete them right away." then "VisitPrep doesn't diagnose, give medical advice or suggest treatment."
+Desktop from 1024px: a 250px progress rail on the left (current step: --vp-tint background, 3px --vp-primary left border, aria-current="step") and the content on the right. Below 1024px: one column, rail hidden. Rail labels: Describe / Questions / Check details / Your summary.
+ui/theme.py and ui/components.py already implement all of the above (merged in P2-1 and P2-1-FIX-1). Reuse their classes and functions; do not rewrite or duplicate the theme.
+
+TASK P2-3a — Step 3 "Is this right?": merge on entry, the details list and the section editors. Log section: P2-3a.
+
+Files to read: AGENTS.md, docs/data_contract.md, core/schema.py, core/interview.py (all read only), ui/state.py, ui/backend.py, ui/handlers.py, ui/components.py, ui/layout.py, ui/theme.py, tests/test_ui/test_handlers_steps12.py.
+Files you may change: ui/state.py, ui/handlers.py, ui/components.py, ui/layout.py, ui/theme.py (only to add classes for the new parts), tests/test_ui/test_handlers_steps34.py (new), tests/test_ui/test_components.py, docs/prompt_log_person2.md.
+
+Facts about the current code (checked on main 0ecdb0e, 259 tests pass):
+- ui/handlers.py has recompute_alerts, _parse_age, on_continue, on_answer, on_skip, on_finish, append_chip and the _NOT_READY message. Reuse them; do not change their behaviour or their tests.
+- ui/backend.py has merge(record, asked) and summarize(record, asked, story). In preview mode merge returns a copy unchanged. In real mode core.interview.merge_answers still raises NotImplementedError (Person 1 task P1-5b); core.summarize.generate_summary too (P1-6).
+- Step 4, the summary call, the PDF and "Start over" are task P2-3b. Do not build them here.
+
+Steps:
+1. ui/state.py: add two keys to new_state(): merged=False (the merge for this session has run, successfully or not) and editing=None (the key of the open editor, or None). Nothing else changes.
+2. ui/handlers.py, plain functions (no gradio), each returns a NEW state dict, never mutates its input, returns the state unchanged when called from the wrong step, and keeps every list it changes as a new list:
+   a. enter_review(state): only when step == 3 and merged is False, otherwise unchanged. Calls backend.merge(record, [QuestionAnswer(**qa) for qa in asked]) exactly once. Success: store record_to_dict(merged record). LLMError: keep the record, error = str(err) + " Your answers are kept. You can still check and change your details below." NotImplementedError: keep the record, error = _NOT_READY. In every case set merged True, then run recompute_alerts.
+   b. SECTIONS = ("problem", "timing", "medicines", "allergies", "history", "concerns", "about").
+   c. open_editor(state, section): step 3 and merged True only; unknown section → unchanged. Sets editing = section (so only one editor is open) and clears error. cancel_editor(state): editing None, error None.
+   d. editor_values(record: dict, section) -> dict: the values that prefill the open editor:
+      problem → {"complaint": text or "", "symptoms": one item per line}
+      timing → {"onset": text or "", "duration": text or "", "severity": "mild"/"moderate"/"severe" or "not-sure" when None}
+      medicines → {"lines": one medicine per line as "name, frequency" (just "name" when frequency is None), "none": medicines_denied is True}
+      allergies / history → {"lines": one item per line, "none": the matching *_denied is True}
+      concerns → {"lines": one item per line}
+      about → {"age_text": patient_age_text or (str(patient_age) if not None) or "", "sex": patient_sex or None}
+   e. save_section(state, section, values: dict): step 3, merged True and editing == section only. Builds a new record dict from the current one:
+      - text fields: stripped; "" → None. List fields: split on newlines, strip, drop empty lines, keep order.
+      - problem: complaint, symptoms. timing: onset, duration, severity ("not-sure" or None → None; severity_note is not changed).
+      - medicines: each line "name, frequency" split on the FIRST comma; the part after it is frequency (None when empty); a line without a comma is a name with frequency None. A name equal to an existing medicine's name (casefold, stripped) keeps that medicine's medicine_type, dose, duration and notes, and its frequency unless a new one is given. New names get medicine_type "unknown" and None for dose, duration and notes.
+      - allergies / history: the list, and the flag: "none" ticked → True; not ticked → None (never False). Ticked together with at least one item → error "Remove the items, or untick the box." and the record is not changed. The same rule for medicines with "I take no medicines".
+      - concerns: the list.
+      - about: patient_age and patient_age_text from _parse_age(age_text); patient_sex = sex when it is in SEX_VALUES, else None. reporting_on_behalf and reporter_relationship are never changed.
+      - Rebuild with record_from_dict and recompute_missing_information; when validate_record reports a problem, error = "This could not be saved. Please check what you typed." and nothing changes.
+      - On success: store the record, append every non-empty new text value of this section (each text field and each list line, medicines by name) to alert_texts (alerts only ever get stricter after an edit), run recompute_alerts, set editing None, error None, summary None and pdf_path None, and bump the token.
+3. ui/components.py:
+   - DETAIL_ROWS: the seven sections in order with their row labels: problem "Main problem" (complaint, then symptoms), timing "When and how bad" (Started / How long / How bad), medicines "Medicines", allergies "Allergies", history "Medical history", concerns "Your questions and worries", about "About the patient" (age, sex, and "Reported by: <reporter_relationship>" only when reporting_on_behalf is True and a relationship is known).
+   - detail_row_html(record: dict, section) -> str: the section label, then the values escaped. An unknown value shows "Not given" (class vp-not-given: italic, --vp-ink-2). A list with its *_denied flag True shows "None (you confirmed)". A list with a None flag and no items shows "Not given". Medicines show "name, frequency" per line. Severity shows the level, plus the severity_note in quotes when present.
+   - Keep the escaping rule: every patient value goes through html.escape.
+4. ui/layout.py (wiring only):
+   - Step 3: h1 "Is this right?", the line "Your own words are kept. Press Change on anything that's wrong." While merged is False, show only the line "Checking your answers… this can take up to a minute" (class vp-helper) instead of the rows.
+   - For each of the seven sections: a gr.HTML with detail_row_html and a link-style gr.Button "Change" ("Add" when the whole section is unknown), then a gr.Group editor (class vp-editor: --vp-tint background, 2px --vp-primary border, radius 8px, 16px padding) that is visible only when editing == that section, with a "Save" (secondary inside the editor) and a "Cancel" (link-style) button. Editor fields:
+     problem: textbox "Main problem", textarea "Symptoms (one per line)".
+     timing: textbox "When did it start?", textbox "How long has it been going on?", gr.Radio "How bad is it?" with Mild/Moderate/Severe/Not sure mapped to mild/moderate/severe/not-sure.
+     medicines: textarea "Medicines (one per line, for example: Amlodipine, every morning)", checkbox "I take no medicines".
+     allergies: textarea "Allergies (one per line)", checkbox "No allergies".
+     history: textarea "Health conditions (one per line)", checkbox "No known health conditions".
+     concerns: textarea "Your questions and worries (one per line)".
+     about: textbox "Age", the same Sex radio as step 1 (no default).
+     Opening an editor fills its fields from editor_values.
+   - Below the sections: the primary "Write my summary" button, shown but not interactive in this task (task P2-3b wires it). Exactly one primary button on step 3.
+   - Chain: every event that can move to step 3 (Save answer, Skip this question, I'm done) runs its handler, renders, then runs enter_review and renders again. While enter_review runs, the step 3 Change buttons are not interactive.
+   - The alert area, progress line and rail update after every handler, as in P2-2.
+5. tests/test_ui/test_handlers_steps34.py (fake backend and core with monkeypatch; neutral fictional data):
+   - enter_review calls merge exactly once with QuestionAnswer objects; a second call does nothing; it does nothing on step 2;
+   - merge raising LLMNetworkError keeps the record, sets the error ending "You can still check and change your details below.", sets merged True;
+   - merge raising NotImplementedError sets the _NOT_READY error and merged True;
+   - after enter_review, check_alerts receives the merged record;
+   - open_editor("medicines") then open_editor("allergies") leaves editing == "allergies"; cancel_editor sets None;
+   - medicines: "Amlodipine, every morning" on an empty list → Medicine(name="Amlodipine", medicine_type="unknown", dose=None, frequency="every morning", duration=None, notes=None); an existing "Ginger tea" with dose "one cup" keeps its dose and type when the line "ginger tea, twice a day" is saved; empty lines are ignored; "Paracetamol" without a comma → frequency None;
+   - for medicines, allergies and history: ticked with an empty list → flag True; not ticked with an empty list → flag None (not False); ticked with an item → the exact error and an unchanged record;
+   - timing: severity "not-sure" → None and severity_note unchanged;
+   - about: age "" → patient_age None and patient_age_text None; sex None → None; reporting_on_behalf unchanged;
+   - a successful save sets summary None, pdf_path None, editing None, recomputes missing_information, adds the new text to alert_texts and calls recompute_alerts;
+   - save_section for a section that is not open → state unchanged;
+   - no handler mutates its input (compare a deepcopy).
+6. tests/test_ui/test_components.py: detail_row_html escapes "<img src=x onerror=alert(1)>" in every text field; shows "Not given" for unknown values; shows "None (you confirmed)" for a denied list; the about row shows "Reported by: mother" only when reporting_on_behalf is True.
+7. Append this prompt verbatim to docs/prompt_log_person2.md as section "## P2-3a" with the line "Model: Qwen/Qwen3.8-27B", inside a ``` code block. Do not change earlier sections.
+
+Acceptance criteria:
+AC1. `python -m pytest -q` passes; report the count and the tests/test_ui count.
+AC2. `grep -rn -i "breath\|chest\|faint\|seizure" ui/` is empty.
+AC3. Manual with VISITPREP_PREVIEW=1 on port 7861 at 375px: paste the fever_adult example story, Continue, answer the first question "No", press "I'm done, check my details". Report: the text of each of the seven rows, whether the "Checking your answers…" line disappeared, and the number of primary buttons on step 3.
+AC4. Same session: Change on Medicines, add the line "Paracetamol, when needed" under the existing line, Save. Report the Medicines row text. Then open Allergies and report whether the Medicines editor closed.
+AC5. At 375px and 1280px on step 3 with one editor open: report document.documentElement.scrollWidth (must equal the viewport width).
+AC6. `git status --short` shows only files from "Files you may change".
+```
