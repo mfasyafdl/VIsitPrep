@@ -236,6 +236,181 @@ def question_text_html(text: str) -> str:
     return f'<p class="vp-question-text">{html.escape(str(text), quote=True)}</p>'
 
 
+# The seven review sections in page order, with their row labels.
+DETAIL_ROWS = (
+    ("problem", "Main problem"),
+    ("timing", "When and how bad"),
+    ("medicines", "Medicines"),
+    ("allergies", "Allergies"),
+    ("history", "Medical history"),
+    ("concerns", "Your questions and worries"),
+    ("about", "About the patient"),
+)
+
+_DETAIL_LABELS = dict(DETAIL_ROWS)
+
+_NOT_GIVEN = '<span class="vp-not-given">Not given</span>'
+_DENIED = "None (you confirmed)"
+
+
+def _detail_value(value: str | None) -> str:
+    if value is None:
+        return _NOT_GIVEN
+    return html.escape(str(value), quote=True)
+
+
+def _detail_line(content: str) -> str:
+    return f'<p class="vp-detail-line">{content}</p>'
+
+
+def _items_line(items: list) -> str:
+    if items:
+        return "".join(
+            _detail_line(html.escape(str(item), quote=True)) for item in items
+        )
+    return _detail_line(_NOT_GIVEN)
+
+
+def detail_row_html(record: dict, section: str) -> str:
+    """The section label and its values, escaped.
+
+    An unknown value shows "Not given"; a list whose *_denied flag is
+    true shows "None (you confirmed)".
+    """
+    label = _DETAIL_LABELS.get(section)
+    if label is None:
+        raise ValueError(f"Unknown detail section: {section!r}")
+    lines: list[str] = []
+    if section == "problem":
+        lines.append(_detail_line(_detail_value(record.get("complaint"))))
+        lines.append(_items_line(record.get("symptoms") or []))
+    elif section == "timing":
+        lines.append(
+            _detail_line(
+                '<span class="vp-detail-sub">Started:</span> '
+                + _detail_value(record.get("onset"))
+            )
+        )
+        lines.append(
+            _detail_line(
+                '<span class="vp-detail-sub">How long:</span> '
+                + _detail_value(record.get("duration"))
+            )
+        )
+        severity = record.get("severity")
+        note = record.get("severity_note")
+        if severity is None:
+            severity_html = _NOT_GIVEN
+        elif note:
+            severity_html = (
+                html.escape(str(severity), quote=True)
+                + ' "'
+                + html.escape(str(note), quote=True)
+                + '"'
+            )
+        else:
+            severity_html = html.escape(str(severity), quote=True)
+        lines.append(
+            _detail_line(
+                '<span class="vp-detail-sub">How bad:</span> ' + severity_html
+            )
+        )
+    elif section == "medicines":
+        if record.get("medicines_denied") is True:
+            lines.append(_detail_line(_DENIED))
+        else:
+            medicines = record.get("medicines") or []
+            if medicines:
+                for medicine in medicines:
+                    name = html.escape(str(medicine.get("name")), quote=True)
+                    frequency = medicine.get("frequency")
+                    if frequency:
+                        lines.append(
+                            _detail_line(
+                                name
+                                + ", "
+                                + html.escape(str(frequency), quote=True)
+                            )
+                        )
+                    else:
+                        lines.append(_detail_line(name))
+            else:
+                lines.append(_detail_line(_NOT_GIVEN))
+    elif section in ("allergies", "history"):
+        key = "allergies" if section == "allergies" else "medical_history"
+        if record.get(key + "_denied") is True:
+            lines.append(_detail_line(_DENIED))
+        else:
+            lines.append(_items_line(record.get(key) or []))
+    elif section == "concerns":
+        lines.append(_items_line(record.get("concerns") or []))
+    elif section == "about":
+        age_text = record.get("patient_age_text")
+        age = record.get("patient_age")
+        shown_age = age_text if age_text else (str(age) if age is not None else None)
+        lines.append(_detail_line(_detail_value(shown_age)))
+        lines.append(_detail_line(_detail_value(record.get("patient_sex"))))
+        if record.get("reporting_on_behalf") is True:
+            relationship = record.get("reporter_relationship")
+            if relationship:
+                lines.append(
+                    _detail_line(
+                        "Reported by: "
+                        + html.escape(str(relationship), quote=True)
+                    )
+                )
+    return (
+        '<div class="vp-detail-row">'
+        f'<p class="vp-detail-label">{html.escape(label)}</p>'
+        + "".join(lines)
+        + "</div>"
+    )
+
+
+def change_label(record: dict, section: str) -> str:
+    """'Add' when the whole section is unknown, 'Change' otherwise."""
+    label = _DETAIL_LABELS.get(section)
+    if label is None:
+        raise ValueError(f"Unknown detail section: {section!r}")
+    if section == "problem":
+        blank = record.get("complaint") is None and not record.get("symptoms")
+    elif section == "timing":
+        blank = (
+            record.get("onset") is None
+            and record.get("duration") is None
+            and record.get("severity") is None
+            and record.get("severity_note") is None
+        )
+    elif section == "medicines":
+        blank = (
+            not record.get("medicines") and record.get("medicines_denied") is None
+        )
+    elif section == "allergies":
+        blank = (
+            not record.get("allergies") and record.get("allergies_denied") is None
+        )
+    elif section == "history":
+        blank = (
+            not record.get("medical_history")
+            and record.get("medical_history_denied") is None
+        )
+    elif section == "concerns":
+        blank = not record.get("concerns")
+    elif section == "about":
+        blank = (
+            record.get("patient_age") is None
+            and record.get("patient_age_text") is None
+            and record.get("patient_sex") is None
+            and not (
+                record.get("reporting_on_behalf") is True
+                and record.get("reporter_relationship")
+            )
+        )
+    else:
+        blank = False
+    return "Add" if blank else "Change"
+
+
 def answers_list_html(asked: list) -> str:
     """The answered questions with the patient's answers, escaped.
 

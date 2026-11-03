@@ -8,6 +8,8 @@ recompute_alerts is the only place a broad except Exception is
 allowed, because the failure is shown to the user.
 """
 
+import copy
+
 from core import interview
 from core import redflag
 from core.llm import LLMError
@@ -15,8 +17,10 @@ from core.schema import (
     SEX_VALUES,
     Alert,
     QuestionAnswer,
+    SchemaError,
     record_from_dict,
     record_to_dict,
+    recompute_missing_information,
 )
 
 import ui.backend as backend
@@ -201,13 +205,265 @@ def on_skip(state: dict) -> dict:
 
 
 def on_finish(state: dict) -> dict:
-    """Step 2: go to step 3 (the merge happens in a later task)."""
+    """Step 2: go to step 3 (the merge happens in enter_review)."""
     if state["step"] != 2:
         return state
     result = dict(state)
     result["question"] = None
     result["error"] = None
     result["step"] = 3
+    return bump(result)
+
+
+# The seven review sections, in page order.
+SECTIONS = ("problem", "timing", "medicines", "allergies", "history", "concerns", "about")
+
+_SAVE_FAILED = "This could not be saved. Please check what you typed."
+_CONFLICT = "Remove the items, or untick the box."
+
+
+def enter_review(state: dict) -> dict:
+    """Step 3: fold all answers into the record, exactly once."""
+    if state["step"] != 3 or state["merged"]:
+        return state
+    result = dict(state)
+    try:
+        merged = backend.merge(
+            record_from_dict(state["record"]),
+            [QuestionAnswer(**qa) for qa in state["asked"]],
+        )
+    except LLMError as err:
+        result["error"] = (
+            str(err)
+            + " Your answers are kept. "
+            "You can still check and change your details below."
+        )
+    except NotImplementedError:
+        result["error"] = _NOT_READY
+    else:
+        result["record"] = record_to_dict(merged)
+        result["error"] = None
+    result["merged"] = True
+    result = recompute_alerts(result)
+    return bump(result)
+
+
+def open_editor(state: dict, section: str) -> dict:
+    """Step 3: open one section editor; only one can be open."""
+    if state["step"] != 3 or not state["merged"] or section not in SECTIONS:
+        return state
+    result = dict(state)
+    result["editing"] = section
+    result["error"] = None
+    return bump(result)
+
+
+def cancel_editor(state: dict) -> dict:
+    """Step 3: close the open editor without saving."""
+    if state["step"] != 3 or not state["merged"]:
+        return state
+    result = dict(state)
+    result["editing"] = None
+    result["error"] = None
+    return bump(result)
+
+
+def _medicine_line(medicine: dict) -> str:
+    if medicine["frequency"]:
+        return f"{medicine['name']}, {medicine['frequency']}"
+    return medicine["name"]
+
+
+def editor_values(record: dict, section: str) -> dict:
+    """The values that prefill the editor of the given section."""
+    if section == "problem":
+        return {
+            "complaint": record["complaint"] or "",
+            "symptoms": "\n".join(record["symptoms"]),
+        }
+    if section == "timing":
+        return {
+            "onset": record["onset"] or "",
+            "duration": record["duration"] or "",
+            "severity": record["severity"] or "not-sure",
+        }
+    if section == "medicines":
+        return {
+            "lines": "\n".join(_medicine_line(m) for m in record["medicines"]),
+            "none": record["medicines_denied"] is True,
+        }
+    if section == "allergies":
+        return {
+            "lines": "\n".join(record["allergies"]),
+            "none": record["allergies_denied"] is True,
+        }
+    if section == "history":
+        return {
+            "lines": "\n".join(record["medical_history"]),
+            "none": record["medical_history_denied"] is True,
+        }
+    if section == "concerns":
+        return {"lines": "\n".join(record["concerns"])}
+    if section == "about":
+        age = record["patient_age_text"]
+        if age is None and record["patient_age"] is not None:
+            age = str(record["patient_age"])
+        return {
+            "age_text": age or "",
+            "sex": record["patient_sex"],
+        }
+    raise ValueError(f"Unknown section: {section!r}")
+
+
+def _text_or_none(value) -> str | None:
+    text = str(value or "").strip()
+    return text or None
+
+
+def _list_from_lines(value) -> list[str]:
+    return [line.strip() for line in str(value or "").split("\n") if line.strip()]
+
+
+def _medicine_parts(line: str) -> tuple[str, str | None]:
+    if "," in line:
+        name, frequency = line.split(",", 1)
+        return name.strip(), frequency.strip() or None
+    return line.strip(), None
+
+
+def _merge_medicines(old: list, lines: list[str]) -> list[dict]:
+    existing = {
+        medicine["name"].casefold().strip(): medicine for medicine in old
+    }
+    merged = []
+    for line in lines:
+        name, frequency = _medicine_parts(line)
+        match = existing.get(name.casefold().strip())
+        if match is None:
+            merged.append(
+                {
+                    "name": name,
+                    "medicine_type": "unknown",
+                    "dose": None,
+                    "frequency": frequency,
+                    "duration": None,
+                    "notes": None,
+                }
+            )
+        else:
+            merged.append(
+                {
+                    "name": match["name"],
+                    "medicine_type": match["medicine_type"],
+                    "dose": match["dose"],
+                    "frequency": frequency or match["frequency"],
+                    "duration": match["duration"],
+                    "notes": match["notes"],
+                }
+            )
+    return merged
+
+
+def _section_texts(section: str, data: dict) -> list:
+    """The text values the given section now holds (nulls possible)."""
+    if section == "problem":
+        texts = [data["complaint"]]
+        texts.extend(data["symptoms"])
+        return texts
+    if section == "timing":
+        return [data["onset"], data["duration"]]
+    if section == "medicines":
+        return [medicine["name"] for medicine in data["medicines"]]
+    if section == "allergies":
+        return list(data["allergies"])
+    if section == "history":
+        return list(data["medical_history"])
+    if section == "concerns":
+        return list(data["concerns"])
+    if section == "about":
+        return [data["patient_age_text"]]
+    return []
+
+
+def _apply_section(data: dict, section: str, values: dict) -> list | None:
+    """Apply one editor to the new record dict in place.
+
+    Returns the section's text values, or None when the "none" box is
+    ticked together with at least one item.
+    """
+    if section == "problem":
+        data["complaint"] = _text_or_none(values.get("complaint"))
+        data["symptoms"] = _list_from_lines(values.get("symptoms"))
+        return _section_texts(section, data)
+    if section == "timing":
+        data["onset"] = _text_or_none(values.get("onset"))
+        data["duration"] = _text_or_none(values.get("duration"))
+        severity = values.get("severity")
+        data["severity"] = None if severity in (None, "not-sure") else severity
+        return _section_texts(section, data)
+    if section == "medicines":
+        items = _list_from_lines(values.get("lines"))
+        denied = values.get("none") is True
+        if denied and items:
+            return None
+        data["medicines"] = _merge_medicines(data["medicines"], items)
+        data["medicines_denied"] = True if denied else None
+        return _section_texts(section, data)
+    if section in ("allergies", "history"):
+        items = _list_from_lines(values.get("lines"))
+        denied = values.get("none") is True
+        if denied and items:
+            return None
+        key = "allergies" if section == "allergies" else "medical_history"
+        data[key] = items
+        data[key + "_denied"] = True if denied else None
+        return _section_texts(section, data)
+    if section == "concerns":
+        data["concerns"] = _list_from_lines(values.get("lines"))
+        return _section_texts(section, data)
+    if section == "about":
+        age, age_text = _parse_age(values.get("age_text"))
+        data["patient_age"] = age
+        data["patient_age_text"] = age_text
+        sex = values.get("sex")
+        data["patient_sex"] = sex if sex in SEX_VALUES else None
+        return _section_texts(section, data)
+    raise ValueError(f"Unknown section: {section!r}")
+
+
+def save_section(state: dict, section: str, values: dict) -> dict:
+    """Step 3: save the open editor into a new record."""
+    if (
+        state["step"] != 3
+        or not state["merged"]
+        or section not in SECTIONS
+        or state["editing"] != section
+    ):
+        return state
+    data = copy.deepcopy(state["record"])
+    new_texts = _apply_section(data, section, values)
+    if new_texts is None:
+        result = dict(state)
+        result["error"] = _CONFLICT
+        return bump(result)
+    try:
+        record = record_from_dict(data)
+    except SchemaError:
+        result = dict(state)
+        result["error"] = _SAVE_FAILED
+        return bump(result)
+    record = recompute_missing_information(record)
+    existing = list(state["alert_texts"])
+    result = dict(state)
+    result["record"] = record_to_dict(record)
+    result["alert_texts"] = existing + [
+        text for text in new_texts if text and text not in existing
+    ]
+    result["editing"] = None
+    result["error"] = None
+    result["summary"] = None
+    result["pdf_path"] = None
+    result = recompute_alerts(result)
     return bump(result)
 
 
