@@ -834,3 +834,127 @@ AC3. Manual without a key: in PowerShell `Remove-Item Env:MODELSCOPE_API_KEY -Er
 AC4. Manual in preview at 375px: child_cough story → Continue → I'm done → scroll to the bottom → Write my summary. Report window.scrollY right after step 4 appears (must be 0 or the top of #vp-root) and the scrollWidth.
 AC5. `git status --short` shows only files from "Files you may change".
 ```
+
+## P2-4b
+
+- Model: Qwen/Qwen3.8-27B
+- Date: 2026-11-03
+
+### Prompt (verbatim)
+
+```
+ROLE: You are the coding agent for Person 2 of VisitPrep, a new Python 3.10 + Gradio app, English only, that helps a patient prepare for a doctor visit. It organizes what the patient reports. It never diagnoses, never recommends treatment or medication changes.
+
+TEAM: Two people build this in parallel. Person 2 (you) owns app.py, ui/, tests/test_ui/, docs/deployment.md and docs/prompt_log_person2.md. Person 1 owns AGENTS.md, requirements*.txt, .gitignore, .env.example, docs/data_contract.md, core/, tests/test_core/, README.md and scripts/. Never edit Person 1's files, even to fix a bug; write a handoff with an exact reproduction instead. If you need a new dependency, ask for it in the handoff.
+
+BEFORE YOU WRITE CODE:
+1. Read AGENTS.md and docs/data_contract.md in full. Then read only the files listed under "Files to read" in the task.
+2. Write a short plan: the files you will change and one line per file on what changes. Then continue; do not wait for approval unless a rule below says stop.
+
+HARD RULES (breaking any of these means the task failed):
+- Only edit files listed under "Files you may change".
+- ui/ has no business logic. Alerts come only from core.redflag. Questions come only from core.interview. Summaries come only from core.summarize. Never reimplement any of them, and never write red-flag trigger words in ui/.
+- Event handlers live in ui/handlers.py as plain functions that take the session state dict plus inputs and return a new state dict; they never import gradio. ui/layout.py only builds components and wires events to those functions.
+- null means unknown. Never turn null into False, 0, "" or "none".
+- Escape every piece of patient text before it goes into gr.HTML or the PDF.
+- No catch-all `except Exception` that hides a failure. Show a visible English message instead.
+- Never print, log or hard-code MODELSCOPE_API_KEY. Tests never use the network.
+- Do not commit, push, merge or change git config. Do not touch any app I am running on port 7860; if you launch the app, use port 7861.
+- All user-facing text is English.
+
+WORK STYLE:
+- Do the steps in order. If one is impossible, say why in the report and continue with the next.
+- Make the smallest change that meets the acceptance criteria. No unrelated refactors.
+- After each file change, run `python -m pytest -q tests/test_ui` and fix failures before moving on. If the same command fails twice for a reason you cannot fix, stop and report the full error.
+- If something is ambiguous, ask me one specific question and stop.
+
+FINAL REPORT (use exactly these headings):
+## Plan vs done
+One line per planned item: DONE / PARTLY / NOT DONE, with file and function.
+## Acceptance criteria
+One line per criterion: PASS / FAIL / NOT RUN, with evidence (the command and the relevant output line, or what you saw).
+## Test results
+The exact last line of `python -m pytest -q`, with totals for tests/test_core and tests/test_ui.
+## Not verified
+Anything you did not check, and why. Never write "should work". If you did not run it, write NOT RUN.
+## Handoff for Person 1
+Exact reproductions or requests (file, function, input, expected, actual), or "None".
+## prompt_log
+Confirm you appended this whole prompt verbatim (Block A2, any extra block, and the task card, exactly as pasted) to docs/prompt_log_person2.md under the section id in the task title, with the model name "Qwen/Qwen3.8-27B", and that earlier sections are unchanged.
+
+DESIGN RULES v2 (exact values from the approved UI preview; do not invent other colours or sizes):
+
+Colour tokens: define each once as a CSS custom property on #vp-root (light values), and override them under `.dark #vp-root` (Gradio's dark class). Dark tokens come ONLY from the .dark class; never add a @media (prefers-color-scheme) block (Gradio already sets .dark in system mode, and the media block breaks ?__theme=light). --vp-ground and --vp-ink are also defined on :root and .dark so the page body uses the ground colour. No hard-coded hex anywhere else. Every rule that sets a background also sets color.
+  token                    light      dark
+  --vp-ground              #EEF4F2    #0E1A1C
+  --vp-surface             #FFFFFF    #16252A
+  --vp-ink                 #15232A    #E3EEEC
+  --vp-ink-2               #44565E    #AFC2C1
+  --vp-primary             #0B6B60    #4FC1B1
+  --vp-on-primary          #FFFFFF    #052421
+  --vp-pressed-edge        #06443D    #2E8C80
+  --vp-tint                #DCEEEA    #1D3A3A
+  --vp-on-tint             #0B4F47    #BDEDE5
+  --vp-input-border        #6B7F84    #6F8A8D   (2px)
+  --vp-hairline            #D3E0DD    #27393D
+  --vp-urgent-band         #C42B1C    #C42B1C   (band text #FFFFFF in both)
+  --vp-urgent-card-border  #C42B1C    #FF8A7A
+  --vp-attn-band           #FFD84D    #FFD84D   (band text #15232A in both)
+  Focus on every button, input, chip and link: outline 4px solid #FFD84D plus an inner 2px edge in --vp-ink (box-shadow inset).
+  Header bar: --vp-primary background with --vp-on-primary text in light mode; --vp-surface with --vp-ink text in dark mode.
+
+Type: "Atkinson Hyperlegible Next" from Google Fonts (weights 400, 600, 700, 800), fallback system-ui, sans-serif. Body 17px, helper text 15px, h1 26px below 1024px and 34px from 1024px. Inputs at least 17px.
+
+Buttons: 52px tall, radius 8px. Primary: filled --vp-primary, text --vp-on-primary, 4px bottom edge in --vp-pressed-edge (box-shadow 0 4px 0) that disappears while pressed (translateY 2px). Secondary: --vp-surface background, 2px --vp-primary border, --vp-primary text. Link-style: no background, underlined --vp-primary text, at least 44px tall. Exactly one primary button per step.
+
+Alerts are care cards: a coloured band whose heading names the action, then a body on --vp-surface.
+  Urgent: band --vp-urgent-band, an h2 heading "Get medical help now" that starts with a visually hidden "Urgent advice:" (class vp-sr-only). Card border 2px --vp-urgent-card-border. Body = core's alert message verbatim, escaped. Exactly one "Call 119" link with href="tel:119" styled as a button (class vp-btn-call: --vp-urgent-band background, white text, 52px, radius 8px, full width below 1024px) inside the card body.
+  Attention: band --vp-attn-band, heading "Tell your doctor about this", hidden "Attention:", body verbatim, no call button.
+  Container: always rendered; role="alert" when any urgent alert is present, otherwise aria-live="polite". With no alerts it is an empty container with no height and never says "no alerts" or "you are safe".
+
+Errors use --vp-surface with a 2px --vp-ink-2 border, never urgent red.
+
+Page order on every step: header bar (brand "VisitPrep" left, "Start over" link-style right) → alert area → "**Step N of 4**, <label>" with a 4-segment progress bar (labels: describe your symptoms / a few questions / check your details / your summary) → step content → action buttons → footer.
+Full-bleed page: no Gradio padding around #vp-root; 16px side padding below 1024px, 24px from 1024px.
+Footer text: "Before you type: your notes are sent to ModelScope to be organized. Leave out your name, address and phone number. The provider doesn't promise to delete them, and closing this tab doesn't delete them right away." then "VisitPrep doesn't diagnose, give medical advice or suggest treatment."
+Desktop from 1024px: a 250px progress rail on the left (current step: --vp-tint background, 3px --vp-primary left border, aria-current="step") and the content on the right. Below 1024px: one column, rail hidden. Rail labels: Describe / Questions / Check details / Your summary.
+ui/theme.py and ui/components.py already implement all of the above (merged in P2-1 and P2-1-FIX-1). Reuse their classes and functions; do not rewrite or duplicate the theme.
+
+TASK P2-4b — "Download PDF" on step 4, and the PDF is removed whenever the note is no longer current. Log section: P2-4b.
+
+Files to read: AGENTS.md, ui/export_pdf.py (read only, Person 1 wrote it in P2-4a), ui/state.py, ui/handlers.py, ui/layout.py, ui/components.py, tests/test_ui/test_handlers_step4.py.
+Files you may change: ui/handlers.py, ui/layout.py, ui/theme.py (only to add classes for the new parts), tests/test_ui/test_handlers_pdf.py (new), docs/prompt_log_person2.md.
+Do not edit ui/export_pdf.py, ui/assets/, core/ or tests/test_core/.
+
+Facts (checked on main 163631c with Gradio 6.31.0 and fpdf2 2.8.9):
+- ui/export_pdf.py: new_session_dir() -> Path (a fresh temp folder named visitprep_…); build_pdf(summary: dict, alerts: list[dict], out_dir) -> Path (writes visitprep-visit-note.pdf, about 1 second); remove_pdf(path) (deletes the file and its empty visitprep_ folder; no error for None or a missing file); cleanup_old_exports() -> int (deletes visitprep_ folders older than 60 minutes). It takes the same summary and alert dicts the state already holds.
+- gr.DownloadButton serves a file from such a temp folder: gr.update(value=str(path), visible=True) and a click downloads visitprep-visit-note.pdf intact (tested).
+- The state already has pdf_path=None. save_section and on_change_details set pdf_path None but do not delete the file; on_reset returns new_state() without deleting it.
+
+Steps:
+1. ui/handlers.py (plain functions, no gradio, same rules: new dict, input not mutated, wrong step → unchanged):
+   a. PDF_FAILED = "The PDF could not be created. You can still copy the note above."
+   b. make_pdf(state): only when step == 4, summary is not None and pdf_path is None. Calls export_pdf.cleanup_old_exports(), then export_pdf.build_pdf(state["summary"], state["alerts"], export_pdf.new_session_dir()) and stores str(path) in pdf_path. Any Exception: log it with logging.getLogger("visitprep").exception("pdf failed"), keep the summary, pdf_path None, error = PDF_FAILED. Update the module docstring's list of broad excepts.
+   c. on_change_details and on_reset: call export_pdf.remove_pdf(state["pdf_path"]) before returning the new state. save_section: if the old state had a pdf_path, remove it too (it clears pdf_path already).
+2. ui/layout.py:
+   a. Step 4: change the line to "Show this to your doctor, or download it as a PDF." Add gr.DownloadButton("Download PDF", elem_classes="vp-btn vp-btn-primary", elem_id="vp-download-pdf", visible=False) above "Change my details", and a gr.HTML (elem_id vp-pdf-status) next to it.
+   b. Render: the download button gets gr.update(value=pdf_path, visible=True) when step == 4 and pdf_path is not None, else gr.update(value=None, visible=False). vp-pdf-status shows '<p class="vp-helper">Preparing the PDF…</p>' when step == 4, summary is not None, pdf_path is None and error is None; otherwise "".
+   c. Chain: after the Write my summary render, add .then(handlers.make_pdf, state → state) and another render, then the existing scroll-to-top. Keep the make_pdf step in a variable and add it to the cancels list of Start over.
+   d. Step 4 now has exactly one primary button (Download PDF).
+3. tests/test_ui/test_handlers_pdf.py (tmp_path; fake export_pdf.new_session_dir to return a folder under tmp_path; use the real build_pdf in at least one test and a fake in the others):
+   - make_pdf on step 4 with a summary: pdf_path is set, the file exists and starts with b"%PDF"; a second make_pdf does nothing; cleanup_old_exports was called once;
+   - make_pdf on step 3, with summary None, or with pdf_path already set: state unchanged;
+   - build_pdf raising RuntimeError: error == PDF_FAILED, summary kept, pdf_path None, step 4;
+   - on_change_details after make_pdf: the file no longer exists and pdf_path is None; the same for on_reset; the same for save_section when a pdf_path is present;
+   - on_reset with pdf_path None does not raise;
+   - no handler mutates its input (compare a deepcopy).
+4. Append this prompt verbatim to docs/prompt_log_person2.md as section "## P2-4b" with the line "Model: Qwen/Qwen3.8-27B", inside a ``` code block. Do not change earlier sections.
+
+Acceptance criteria:
+AC1. `python -m pytest -q` passes; report the count and the tests/test_ui count.
+AC2. `grep -rn -i "breath\|chest\|faint\|seizure" ui/` is empty.
+AC3. Manual with VISITPREP_PREVIEW=1 on port 7861 at 375px (Playwright with acceptDownloads, or Chrome by hand): child_cough example story → Continue → I'm done → Write my summary. Report: the number of primary buttons on step 4 (must be 1), the downloaded file name, its size in bytes, its page count, and the first three lines of its text.
+AC4. Same session: Change my details → report whether the Download PDF button is hidden and whether the previous file path still exists (must not). Write my summary again → the button is back. Start over → hidden.
+AC5. At 1280px on step 4: scrollWidth must equal 1280, and the Download PDF button must sit above Change my details.
+AC6. `git status --short` shows only files from "Files you may change".
+```

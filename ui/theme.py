@@ -742,4 +742,26 @@ body {{
     min-width: 0 !important;
   }}
 }}
+
+/* Step 4: the Download PDF button and its status line. */
+#vp-root #vp-pdf-row {{
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 16px;
+  width: 100%;
+  background: var(--vp-ground);
+  color: var(--vp-ink);
+}}
+
+#vp-root #vp-pdf-row .column {{
+  flex: 0 0 auto;
+  min-width: 0;
+  background: var(--vp-ground);
+  color: var(--vp-ink);
+}}
+
+#vp-root #vp-pdf-status p {{
+  margin: 0;
+}}
 """

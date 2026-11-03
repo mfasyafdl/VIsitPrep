@@ -182,6 +182,25 @@ def _summary_button_update(state: dict):
     return gr.update(interactive=False, value="Write my summary")
 
 
+def _pdf_download_update(state: dict):
+    """The Download PDF button: shown only with a built PDF on step 4."""
+    if state["step"] == STEP_4 and state["pdf_path"] is not None:
+        return gr.update(value=state["pdf_path"], visible=True)
+    return gr.update(value=None, visible=False)
+
+
+def _pdf_status_html(state: dict) -> str:
+    """'Preparing the PDF…' while the step 4 PDF is being built."""
+    if (
+        state["step"] == STEP_4
+        and state["summary"] is not None
+        and state["pdf_path"] is None
+        and state["error"] is None
+    ):
+        return '<p class="vp-helper">Preparing the PDF…</p>'
+    return ""
+
+
 def _render(state: dict) -> list:
     """Map the state dict to the values of render_outputs."""
     step = state["step"]
@@ -201,7 +220,12 @@ def _render(state: dict) -> list:
         _question_text(state),
         answers_list_html(state["asked"]),
         gr.update(label=f"Your answers so far ({len(state['asked'])})"),
-    ] + _step3_values(state) + _step4_values(state) + [_summary_button_update(state)]
+        *_step3_values(state),
+        *_step4_values(state),
+        _pdf_download_update(state),
+        _pdf_status_html(state),
+        _summary_button_update(state),
+    ]
 
 
 def _answer_box_value(state: dict):
@@ -536,7 +560,10 @@ def build_interface() -> None:
                     )
                 with gr.Column(elem_id="vp-step-4", visible=False) as step4_col:
                     gr.Markdown(f"# {STEP_NAMES[3]}")
-                    gr.HTML('<p class="vp-helper">Show this to your doctor.</p>')
+                    gr.HTML(
+                        '<p class="vp-helper">Show this to your doctor, '
+                        "or download it as a PDF.</p>"
+                    )
                     with gr.Row(elem_id="vp-step4-grid"):
                         with gr.Column():
                             visit_note = gr.HTML("", elem_id="vp-visit-note")
@@ -548,6 +575,14 @@ def build_interface() -> None:
                                 elem_id="vp-copy-script",
                             )
                             questions_block = gr.HTML("", elem_id="vp-questions")
+                    with gr.Row(elem_id="vp-pdf-row"):
+                        download_btn = gr.DownloadButton(
+                            "Download PDF",
+                            elem_classes="vp-btn vp-btn-primary",
+                            elem_id="vp-download-pdf",
+                            visible=False,
+                        )
+                        pdf_status = gr.HTML("", elem_id="vp-pdf-status")
                     change_details_btn = gr.Button(
                         "Change my details",
                         elem_classes="vp-btn vp-btn-secondary",
@@ -580,7 +615,14 @@ def build_interface() -> None:
         question,
         answers,
         accordion,
-    ] + step3_outputs + [visit_note, script_block, questions_block, summary_btn]
+        *step3_outputs,
+        visit_note,
+        script_block,
+        questions_block,
+        download_btn,
+        pdf_status,
+        summary_btn,
+    ]
 
     chip_started.click(
         partial(handlers.append_chip, chip="It started…"),
@@ -725,7 +767,16 @@ def build_interface() -> None:
         inputs=[state],
         outputs=[state],
     )
-    summarize_model_step.then(
+    summarize_pdf_step = summarize_model_step.then(
+        _render,
+        inputs=[state],
+        outputs=render_outputs,
+    ).then(
+        handlers.make_pdf,
+        inputs=[state],
+        outputs=[state],
+    )
+    summarize_pdf_step.then(
         _render,
         inputs=[state],
         outputs=render_outputs,
@@ -764,5 +815,6 @@ def build_interface() -> None:
             skip_merge_step,
             done_merge_step,
             summarize_model_step,
+            summarize_pdf_step,
         ],
     ).then(None, js=SCROLL_TO_TOP_JS)
