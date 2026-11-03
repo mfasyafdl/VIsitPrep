@@ -438,4 +438,123 @@ body {{
 #vp-root .vp-footer p:last-child {{
   margin-bottom: 0;
 }}
+
+/* Step 1: helper line, chip buttons, form inputs. */
+#vp-root .vp-helper {{
+  font-size: 15px;
+  color: var(--vp-ink-2);
+}}
+
+#vp-root .vp-chip {{
+  height: 44px;
+  padding: 0 16px;
+  font-size: 15px;
+  font-weight: 600;
+}}
+
+#vp-root .vp-input input,
+#vp-root .vp-input textarea {{
+  border: 2px solid var(--vp-input-border);
+  background: var(--vp-surface);
+  color: var(--vp-ink);
+  font-size: 17px;
+}}
+
+#vp-root .vp-input input::placeholder,
+#vp-root .vp-input textarea::placeholder {{
+  color: var(--vp-ink-2);
+}}
+
+/* Sex choices styled as four buttons. */
+#vp-root .vp-sex label {{
+  border: 2px solid var(--vp-input-border);
+  border-radius: 8px;
+  background: var(--vp-surface);
+  color: var(--vp-ink);
+  font-size: 17px;
+  padding: 0 16px;
+  height: 44px;
+}}
+
+#vp-root .vp-sex label:has(input:checked) {{
+  border-color: var(--vp-primary);
+  background: var(--vp-tint);
+  color: var(--vp-on-tint);
+  font-weight: 600;
+}}
+
+/* Step 2: question heading, pips, question text, answers list. */
+#vp-root .vp-question-heading {{
+  margin: 0 0 16px;
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--vp-ink);
+}}
+
+@media (min-width: 1024px) {{
+  #vp-root .vp-question-heading {{
+    font-size: 34px;
+  }}
+}}
+
+#vp-root .vp-question-text {{
+  margin: 0 0 16px;
+  font-size: 23px;
+  font-weight: 700;
+  color: var(--vp-ink);
+}}
+
+#vp-root .vp-pips {{
+  display: flex;
+  gap: 8px;
+  margin: 0 0 16px;
+}}
+
+#vp-root .vp-pip {{
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--vp-surface);
+  color: var(--vp-ink);
+  border: 2px solid var(--vp-input-border);
+}}
+
+#vp-root .vp-pip-answered {{
+  background: var(--vp-primary);
+  color: var(--vp-ink);
+  border-color: var(--vp-primary);
+}}
+
+#vp-root .vp-pip-current {{
+  background: var(--vp-tint);
+  color: var(--vp-ink);
+  border: 2px solid var(--vp-primary);
+}}
+
+#vp-root .vp-pip-skipped {{
+  background: var(--vp-surface);
+  color: var(--vp-ink);
+  border: 2px dashed var(--vp-input-border);
+}}
+
+#vp-root .vp-answers {{
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}}
+
+#vp-root .vp-answer p {{
+  margin: 0;
+  color: var(--vp-ink);
+}}
+
+#vp-root .vp-answer-question {{
+  font-weight: 600;
+  color: var(--vp-ink-2);
+}}
+
+#vp-root .vp-answers-none {{
+  margin: 0;
+  color: var(--vp-ink-2);
+}}
 """
