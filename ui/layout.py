@@ -63,7 +63,7 @@ def _question_text(state: dict) -> str:
 
 
 def _render(state: dict) -> list:
-    """Map the state dict to the values of RENDER_OUTPUTS."""
+    """Map the state dict to the values of render_outputs."""
     step = state["step"]
     number = _question_number(state)
     skipped_positions = [entry["position"] for entry in state["skipped"]]
@@ -82,6 +82,17 @@ def _render(state: dict) -> list:
         answers_list_html(state["asked"]),
         gr.update(label=f"Your answers so far ({len(state['asked'])})"),
     ]
+
+
+def _answer_box_value(state: dict):
+    """Clear the answer box on success; keep the typed text on error."""
+    if state["error"] is None:
+        return ""
+    return gr.update()
+
+
+def _render_after_answer(state: dict) -> list:
+    return _render(state) + [_answer_box_value(state)]
 
 
 def _disable_step1() -> list:
@@ -199,12 +210,12 @@ def build_interface() -> None:
                         "Skipping still uses one of the five questions."
                         "</p>"
                     )
-                    accordion = gr.Accordion(
+                    with gr.Accordion(
                         "Your answers so far (0)", open=False
-                    )
-                    answers = gr.HTML(
-                        answers_list_html([]), elem_id="vp-answers"
-                    )
+                    ) as accordion:
+                        answers = gr.HTML(
+                            answers_list_html([]), elem_id="vp-answers"
+                        )
                 with gr.Column(elem_id="vp-step-3", visible=False) as step3_col:
                     gr.Markdown(f"# {STEP_NAMES[2]}")
                 with gr.Column(elem_id="vp-step-4", visible=False) as step4_col:
@@ -262,9 +273,9 @@ def build_interface() -> None:
         inputs=[state, answer_box],
         outputs=[state],
     ).then(
-        _render,
+        _render_after_answer,
         inputs=[state],
-        outputs=render_outputs,
+        outputs=render_outputs + [answer_box],
     )
 
     skip_btn.click(
@@ -272,9 +283,9 @@ def build_interface() -> None:
         inputs=[state],
         outputs=[state],
     ).then(
-        _render,
+        _render_after_answer,
         inputs=[state],
-        outputs=render_outputs,
+        outputs=render_outputs + [answer_box],
     )
 
     done_btn.click(

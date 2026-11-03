@@ -91,9 +91,14 @@ def test_recompute_alerts_runs_before_extract(monkeypatch):
 
 def test_extract_llm_error_keeps_story_and_stays_on_step1(monkeypatch):
     record = fixtures.get_fixture("fever_adult")
+    check_calls = []
     _fake_redflag(
         monkeypatch,
         [Alert("a", "Watch this", "attention")],
+    )
+    monkeypatch.setattr(
+        "core.redflag.check_alerts",
+        lambda record: check_calls.append(record),
     )
     _fake_extract(
         monkeypatch,
@@ -113,11 +118,32 @@ def test_extract_llm_error_keeps_story_and_stays_on_step1(monkeypatch):
     assert result["alerts"] == [{"code": "a", "message": "Watch this", "level": "attention"}]
     assert result["record"] is None
     assert server.calls == 0
+    assert check_calls == []
     assert result["error"].endswith("Press Continue to try again.")
     assert result["error"] == (
         "The AI service did not respond. Your text is kept. "
         "Press Continue to try again."
     )
+
+
+def test_on_continue_runs_check_alerts_after_extract(monkeypatch):
+    log = []
+    record = fixtures.get_fixture("fever_adult")
+    _fake_redflag(monkeypatch, [], log=log)
+    monkeypatch.setattr(
+        "core.redflag.check_alerts",
+        lambda rec: (log.append("check_alerts"), [Alert("rec", "Record alert", "attention")])[1],
+    )
+    _fake_extract(monkeypatch, record=record, log=log)
+    server = QuestionServer(["Q1"])
+    monkeypatch.setattr("core.interview.next_question", server)
+    state = handlers.on_continue(_step1_state(), "I feel unwell.", "", None)
+    assert log.index("scan_text") < log.index("extract") < log.index("check_alerts")
+    assert log.count("check_alerts") == 1
+    assert state["step"] == 2
+    assert state["alerts"] == [
+        {"code": "rec", "message": "Record alert", "level": "attention"}
+    ]
 
 
 def test_three_answers_two_skips_end_on_step3_without_sixth_call(monkeypatch):
@@ -355,10 +381,10 @@ def test_preview_extract_matches_each_fixture_story(monkeypatch):
         assert padded_record.complaint == expected.complaint
 
 
-def test_preview_extract_unknown_story_gives_chest_pain(monkeypatch):
+def test_preview_extract_unknown_story_gives_child_cough(monkeypatch):
     _preview(monkeypatch)
     record = backend.extract("A story nobody has heard before.", None)
-    expected = fixtures.get_fixture("chest_pain")
+    expected = fixtures.get_fixture("child_cough")
     assert record.complaint == expected.complaint
 
 

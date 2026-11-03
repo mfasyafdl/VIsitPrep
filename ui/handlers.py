@@ -122,6 +122,7 @@ def on_continue(state: dict, story, age_text, sex) -> dict:
         result["error"] = _NOT_READY
         return bump(result)
     result["record"] = record_to_dict(record)
+    result = recompute_alerts(result)
     if len(result["asked"]) + len(result["skipped"]) >= _MAX_QUESTIONS:
         result["question"] = None
         result["step"] = 3

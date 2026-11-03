@@ -335,3 +335,38 @@ AC6. Manual with VISITPREP_PREVIEW=1 on port 7861 at 375px and 1280px: paste the
 AC7. `python -m pytest -q` passes; report the count.
 AC8. `git status --short` shows only files from "Files you may change".
 ```
+
+## P2-2-FIX-1
+
+- Model: Qwen/Qwen3.8-27B
+- Date: 2026-11-03
+
+### Prompt (verbatim)
+
+```
+FIX P2-2-1 — four defects found in an independent re-test. Log section: P2-2-FIX-1. Do not commit.
+
+Files to read: AGENTS.md, docs/data_contract.md, core/fixtures.py, core/redflag.py, ui/backend.py, ui/handlers.py, ui/layout.py, tests/test_ui/test_handlers_steps12.py.
+Files you may change: ui/backend.py, ui/handlers.py, ui/layout.py, tests/test_ui/test_handlers_steps12.py, docs/prompt_log_person2.md.
+
+Audit result: 116 tests pass, the log is verbatim and the step 1–2 flow works at 375px and 1280px. Four defects remain; two come from the task card itself, so where this prompt and task P2-2 differ, this prompt wins.
+
+Steps:
+1. Answers accordion. In ui/layout.py the accordion is created as `accordion = gr.Accordion(...)` without `with`, so it is empty and the answers list always shows below it. Build it as `with gr.Accordion("Your answers so far (0)", open=False) as accordion:` and create the answers gr.HTML inside it. Keep updating its label with the count.
+2. Clear the answer box. After "Save answer" succeeds (state error is None) and after "Skip this question", the "Your answer" textbox becomes empty. When on_answer sets an error (empty answer), the textbox keeps what was typed. Do this in ui/layout.py wiring only (for example an extra output of the render step that returns "" or gr.update()); handlers stay free of gradio.
+3. Record alerts right after extract. In on_continue keep the recompute_alerts call BEFORE backend.extract, and after extract succeeds and the record is stored, call recompute_alerts again so check_alerts(record) is reflected when step 2 appears. When extract fails, only the first call happens.
+4. Preview default fixture. In ui/backend.py set DEFAULT_PREVIEW_FIXTURE = "child_cough". A story that is not one of the example stories must never produce an alert the person did not report.
+5. Tests in tests/test_ui/test_handlers_steps12.py:
+   - on_continue with a faked check_alerts that returns an alert only when given a record: after on_continue the state contains that alert, and the call order is scan_text, extract, check_alerts;
+   - extract raising LLMNetworkError: check_alerts is never called with a record;
+   - preview: an unknown story gives the child_cough fixture (replace the chest_pain test); each example story still gives its own fixture;
+   - keep every other existing test.
+6. Append this prompt verbatim to docs/prompt_log_person2.md as section "## P2-2-FIX-1" with the line "Model: Qwen/Qwen3.8-27B", inside a ``` code block. Do not change earlier sections.
+
+Acceptance criteria:
+AC1. `python -m pytest -q` passes; report the count and the tests/test_ui count.
+AC2. `grep -rn -i "breath\|chest\|faint\|seizure" ui/` is empty (ui/backend.py included).
+AC3. Manual with VISITPREP_PREVIEW=1 on port 7861 at 375px: paste the child_cough example story, Continue, answer "No medicines." and press Save answer. Report: the answer box content after saving (must be empty), whether the saved answer is visible before opening the accordion (must not be), and what shows after opening it.
+AC4. Same setup, story "I have a headache.", Continue, answer the first question. Report the alert area text (must not mention chest pain).
+AC5. `git status --short` shows only files from "Files you may change".
+```

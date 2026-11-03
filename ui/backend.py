@@ -24,7 +24,7 @@ from core.schema import (
 
 PREVIEW = os.environ.get("VISITPREP_PREVIEW") == "1"
 
-DEFAULT_PREVIEW_FIXTURE = "chest_pain"
+DEFAULT_PREVIEW_FIXTURE = "child_cough"
 
 
 def _fixture_name(story: str) -> str:
