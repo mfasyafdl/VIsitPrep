@@ -21,6 +21,8 @@ def new_state() -> dict:
         "asked": [],
         "skipped": [],
         "question": None,
+        "merged": False,
+        "editing": None,
         "summary": None,
         "pdf_path": None,
         "error": None,

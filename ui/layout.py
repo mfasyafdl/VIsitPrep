@@ -15,10 +15,13 @@ from core.schema import Alert
 from ui import handlers
 from ui.components import (
     ALERTS_ERROR_MESSAGE,
+    DETAIL_ROWS,
     STEP_NAMES,
     answers_list_html,
     alerts_error_html,
     alerts_html,
+    change_label,
+    detail_row_html,
     footer_html,
     header_html,
     pips_html,
@@ -36,6 +39,31 @@ STEP_3 = 3
 STEP_4 = 4
 
 WORKING_LABEL = "Working… this can take up to a minute"
+
+SEVERITY_CHOICES = (
+    ("Mild", "mild"),
+    ("Moderate", "moderate"),
+    ("Severe", "severe"),
+    ("Not sure", "not-sure"),
+)
+
+SEX_CHOICES = (
+    ("Female", "female"),
+    ("Male", "male"),
+    ("Other", "other"),
+    ("Prefer not to say", "not-specified"),
+)
+
+# Editor field order per section; the keys match handlers.editor_values.
+EDITOR_FIELDS = {
+    "problem": ("complaint", "symptoms"),
+    "timing": ("onset", "duration", "severity"),
+    "medicines": ("lines", "none"),
+    "allergies": ("lines", "none"),
+    "history": ("lines", "none"),
+    "concerns": ("lines",),
+    "about": ("age_text", "sex"),
+}
 
 
 def _alerts_area(state: dict) -> str:
@@ -62,6 +90,59 @@ def _question_text(state: dict) -> str:
     return ""
 
 
+def _empty_editor(section: str) -> dict:
+    """Placeholder editor values while the record is not available."""
+    values = {}
+    for key in EDITOR_FIELDS[section]:
+        if key == "none":
+            values[key] = False
+        elif key in ("severity", "sex"):
+            values[key] = None
+        else:
+            values[key] = ""
+    return values
+
+
+def _editor_field_values(state: dict, section: str) -> list:
+    """The field updates for one section editor.
+
+    While that editor is open and a save failed, the fields keep what
+    the patient typed (no-change updates). In every other case the
+    fields get the values of the stored record (or empty placeholders
+    while the record is not available).
+    """
+    if state["editing"] == section and state["error"] is not None:
+        return [gr.update() for _ in EDITOR_FIELDS[section]]
+    merged = state["step"] == STEP_3 and state["merged"] is True
+    if merged and state["record"] is not None:
+        editor = handlers.editor_values(state["record"], section)
+    else:
+        editor = _empty_editor(section)
+    return [gr.update(value=editor[key]) for key in EDITOR_FIELDS[section]]
+
+
+def _step3_values(state: dict) -> list:
+    """The step 3 outputs: the checking line, the rows, the editors."""
+    at_step3 = state["step"] == STEP_3
+    merged = at_step3 and state["merged"] is True
+    record = state["record"] if merged else None
+    values = [gr.update(visible=at_step3 and not state["merged"])]
+    for section, _label in DETAIL_ROWS:
+        if record is not None:
+            row = detail_row_html(record, section)
+            label = change_label(record, section)
+        else:
+            row = ""
+            label = "Change"
+        values.append(row)
+        values.append(gr.update(value=label, interactive=merged))
+        values.append(gr.update(visible=state["editing"] == section))
+        values.extend(_editor_field_values(state, section))
+        values.append(gr.update(interactive=merged))
+        values.append(gr.update(interactive=merged))
+    return values
+
+
 def _render(state: dict) -> list:
     """Map the state dict to the values of render_outputs."""
     step = state["step"]
@@ -81,7 +162,7 @@ def _render(state: dict) -> list:
         _question_text(state),
         answers_list_html(state["asked"]),
         gr.update(label=f"Your answers so far ({len(state['asked'])})"),
-    ]
+    ] + _step3_values(state)
 
 
 def _answer_box_value(state: dict):
@@ -116,6 +197,18 @@ def _enable_step1(state: dict) -> list:
     )
 
 
+def _open_editor(section: str, state: dict) -> dict:
+    """Wire a section's Change button to open_editor."""
+    return handlers.open_editor(state, section)
+
+
+def _save_section(section: str, state: dict, *field_values) -> dict:
+    """Wire a section's Save button to save_section."""
+    return handlers.save_section(
+        state, section, dict(zip(EDITOR_FIELDS[section], field_values))
+    )
+
+
 def build_interface() -> None:
     """Build the four-step app inside the surrounding Blocks.
 
@@ -147,6 +240,7 @@ def build_interface() -> None:
                         lines=5,
                         max_lines=20,
                         elem_classes="vp-input",
+                        elem_id="vp-story",
                     )
                     with gr.Row(elem_id="vp-chips"):
                         chip_started = gr.Button(
@@ -167,18 +261,14 @@ def build_interface() -> None:
                     )
                     sex_radio = gr.Radio(
                         label="Sex",
-                        choices=[
-                            ("Female", "female"),
-                            ("Male", "male"),
-                            ("Other", "other"),
-                            ("Prefer not to say", "not-specified"),
-                        ],
+                        choices=SEX_CHOICES,
                         value=None,
                         elem_classes="vp-sex",
                     )
                     continue_btn = gr.Button(
                         "Continue",
                         elem_classes="vp-btn vp-btn-primary",
+                        elem_id="vp-continue",
                     )
                 with gr.Column(elem_id="vp-step-2", visible=False) as step2_col:
                     q_heading = gr.HTML(
@@ -191,19 +281,23 @@ def build_interface() -> None:
                         lines=3,
                         max_lines=10,
                         elem_classes="vp-input",
+                        elem_id="vp-answer",
                     )
                     with gr.Row():
                         save_btn = gr.Button(
                             "Save answer",
                             elem_classes="vp-btn vp-btn-primary",
+                            elem_id="vp-save-answer",
                         )
                         skip_btn = gr.Button(
                             "Skip this question",
                             elem_classes="vp-btn vp-btn-secondary",
+                            elem_id="vp-skip",
                         )
                     done_btn = gr.Button(
                         "I'm done, check my details",
                         elem_classes="vp-btn vp-btn-link",
+                        elem_id="vp-done",
                     )
                     gr.HTML(
                         '<p class="vp-helper">'
@@ -218,9 +312,165 @@ def build_interface() -> None:
                         )
                 with gr.Column(elem_id="vp-step-3", visible=False) as step3_col:
                     gr.Markdown(f"# {STEP_NAMES[2]}")
+                    gr.Markdown(
+                        "Your own words are kept. "
+                        "Press Change on anything that's wrong."
+                    )
+                    step3_checking = gr.HTML(
+                        '<p class="vp-helper">Checking your answers… this can '
+                        "take up to a minute</p>",
+                        elem_id="vp-step3-checking",
+                    )
+                    step3_parts = {}
+                    for section, _label in DETAIL_ROWS:
+                        with gr.Row(elem_classes="vp-detail"):
+                            row = gr.HTML(
+                                "", elem_id=f"vp-step3-row-{section}"
+                            )
+                            change = gr.Button(
+                                "Change",
+                                elem_classes="vp-btn vp-btn-link",
+                                elem_id=f"vp-step3-change-{section}",
+                            )
+                        fields = {}
+                        with gr.Column(
+                            elem_id=f"vp-step3-editor-{section}",
+                            elem_classes="vp-editor",
+                            visible=False,
+                        ) as editor_group:
+                            if section == "problem":
+                                fields["complaint"] = gr.Textbox(
+                                    label="Main problem",
+                                    elem_classes="vp-input",
+                                    elem_id="vp-edit-problem-complaint",
+                                )
+                                fields["symptoms"] = gr.Textbox(
+                                    label="Symptoms (one per line)",
+                                    lines=3,
+                                    max_lines=8,
+                                    elem_classes="vp-input",
+                                    elem_id="vp-edit-problem-symptoms",
+                                )
+                            elif section == "timing":
+                                fields["onset"] = gr.Textbox(
+                                    label="When did it start?",
+                                    elem_classes="vp-input",
+                                    elem_id="vp-edit-timing-onset",
+                                )
+                                fields["duration"] = gr.Textbox(
+                                    label="How long has it been going on?",
+                                    elem_classes="vp-input",
+                                    elem_id="vp-edit-timing-duration",
+                                )
+                                fields["severity"] = gr.Radio(
+                                    label="How bad is it?",
+                                    choices=SEVERITY_CHOICES,
+                                    value=None,
+                                    elem_classes="vp-sex",
+                                    elem_id="vp-edit-timing-severity",
+                                )
+                            elif section == "medicines":
+                                fields["lines"] = gr.Textbox(
+                                    label=(
+                                        "Medicines (one per line, for example: "
+                                        "Amlodipine, every morning)"
+                                    ),
+                                    lines=3,
+                                    max_lines=8,
+                                    elem_classes="vp-input",
+                                    elem_id="vp-edit-medicines-lines",
+                                )
+                                fields["none"] = gr.Checkbox(
+                                    label="I take no medicines",
+                                    elem_id="vp-edit-medicines-none",
+                                )
+                            elif section == "allergies":
+                                fields["lines"] = gr.Textbox(
+                                    label="Allergies (one per line)",
+                                    lines=3,
+                                    max_lines=8,
+                                    elem_classes="vp-input",
+                                    elem_id="vp-edit-allergies-lines",
+                                )
+                                fields["none"] = gr.Checkbox(
+                                    label="No allergies",
+                                    elem_id="vp-edit-allergies-none",
+                                )
+                            elif section == "history":
+                                fields["lines"] = gr.Textbox(
+                                    label="Health conditions (one per line)",
+                                    lines=3,
+                                    max_lines=8,
+                                    elem_classes="vp-input",
+                                    elem_id="vp-edit-history-lines",
+                                )
+                                fields["none"] = gr.Checkbox(
+                                    label="No known health conditions",
+                                    elem_id="vp-edit-history-none",
+                                )
+                            elif section == "concerns":
+                                fields["lines"] = gr.Textbox(
+                                    label=(
+                                        "Your questions and worries "
+                                        "(one per line)"
+                                    ),
+                                    lines=3,
+                                    max_lines=8,
+                                    elem_classes="vp-input",
+                                    elem_id="vp-edit-concerns-lines",
+                                )
+                            elif section == "about":
+                                fields["age_text"] = gr.Textbox(
+                                    label="Age",
+                                    elem_classes="vp-input",
+                                    elem_id="vp-edit-about-age",
+                                )
+                                fields["sex"] = gr.Radio(
+                                    label="Sex",
+                                    choices=SEX_CHOICES,
+                                    value=None,
+                                    elem_classes="vp-sex",
+                                    elem_id="vp-edit-about-sex",
+                                )
+                            with gr.Row(elem_classes="vp-editor-actions"):
+                                save = gr.Button(
+                                    "Save",
+                                    elem_classes="vp-btn vp-btn-secondary",
+                                    elem_id=f"vp-step3-save-{section}",
+                                )
+                                cancel = gr.Button(
+                                    "Cancel",
+                                    elem_classes="vp-btn vp-btn-link",
+                                    elem_id=f"vp-step3-cancel-{section}",
+                                )
+                        step3_parts[section] = {
+                            "row": row,
+                            "change": change,
+                            "editor": editor_group,
+                            "fields": fields,
+                            "save": save,
+                            "cancel": cancel,
+                        }
+                    gr.Button(
+                        "Write my summary",
+                        elem_classes="vp-btn vp-btn-primary",
+                        interactive=False,
+                        elem_id="vp-step3-summary",
+                    )
                 with gr.Column(elem_id="vp-step-4", visible=False) as step4_col:
                     gr.Markdown(f"# {STEP_NAMES[3]}")
         gr.HTML(footer_html(), elem_id="vp-footer")
+
+    step3_outputs = [step3_checking]
+    for section, _label in DETAIL_ROWS:
+        part = step3_parts[section]
+        step3_outputs.append(part["row"])
+        step3_outputs.append(part["change"])
+        step3_outputs.append(part["editor"])
+        for key in EDITOR_FIELDS[section]:
+            step3_outputs.append(part["fields"][key])
+        step3_outputs.append(part["save"])
+        step3_outputs.append(part["cancel"])
 
     render_outputs = [
         alerts_area,
@@ -236,7 +486,7 @@ def build_interface() -> None:
         question,
         answers,
         accordion,
-    ]
+    ] + step3_outputs
 
     chip_started.click(
         partial(handlers.append_chip, chip="It started…"),
@@ -254,6 +504,8 @@ def build_interface() -> None:
         outputs=story_box,
     )
 
+    # Every event that can move to step 3 runs its handler, renders,
+    # then runs enter_review and renders again.
     continue_btn.click(
         _disable_step1,
         outputs=[chip_started, chip_feels, chip_takes, continue_btn],
@@ -266,6 +518,14 @@ def build_interface() -> None:
         inputs=[state],
         outputs=[chip_started, chip_feels, chip_takes, continue_btn]
         + render_outputs,
+    ).then(
+        handlers.enter_review,
+        inputs=[state],
+        outputs=[state],
+    ).then(
+        _render,
+        inputs=[state],
+        outputs=render_outputs,
     )
 
     save_btn.click(
@@ -276,6 +536,14 @@ def build_interface() -> None:
         _render_after_answer,
         inputs=[state],
         outputs=render_outputs + [answer_box],
+    ).then(
+        handlers.enter_review,
+        inputs=[state],
+        outputs=[state],
+    ).then(
+        _render,
+        inputs=[state],
+        outputs=render_outputs,
     )
 
     skip_btn.click(
@@ -286,6 +554,14 @@ def build_interface() -> None:
         _render_after_answer,
         inputs=[state],
         outputs=render_outputs + [answer_box],
+    ).then(
+        handlers.enter_review,
+        inputs=[state],
+        outputs=[state],
+    ).then(
+        _render,
+        inputs=[state],
+        outputs=render_outputs,
     )
 
     done_btn.click(
@@ -296,4 +572,43 @@ def build_interface() -> None:
         _render,
         inputs=[state],
         outputs=render_outputs,
+    ).then(
+        handlers.enter_review,
+        inputs=[state],
+        outputs=[state],
+    ).then(
+        _render,
+        inputs=[state],
+        outputs=render_outputs,
     )
+
+    for section, _label in DETAIL_ROWS:
+        part = step3_parts[section]
+        part["change"].click(
+            partial(_open_editor, section),
+            inputs=[state],
+            outputs=[state],
+        ).then(
+            _render,
+            inputs=[state],
+            outputs=render_outputs,
+        )
+        part["save"].click(
+            partial(_save_section, section),
+            inputs=[state]
+            + [part["fields"][key] for key in EDITOR_FIELDS[section]],
+            outputs=[state],
+        ).then(
+            _render,
+            inputs=[state],
+            outputs=render_outputs,
+        )
+        part["cancel"].click(
+            handlers.cancel_editor,
+            inputs=[state],
+            outputs=[state],
+        ).then(
+            _render,
+            inputs=[state],
+            outputs=render_outputs,
+        )
