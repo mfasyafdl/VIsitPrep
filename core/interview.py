@@ -1,5 +1,6 @@
 """Interview interface: next_question(record, asked, skipped, max_questions) picks the next rule-based question with no network call, and merge_answers(record, asked, *, config) folds all answers into a new record with one model call, per docs/data_contract.md."""
 
+import copy
 import json
 import re
 
@@ -62,6 +63,170 @@ QUESTIONS_ON_BEHALF: dict[str, str] = {
 
 def _normalize(text: str) -> str:
     return text.casefold().strip()
+
+
+_QUESTION_FIELDS: dict[str, str] = {
+    question.casefold().strip(): field
+    for table in (QUESTIONS_SELF, QUESTIONS_ON_BEHALF)
+    for field, question in table.items()
+}
+
+NEGATIVE_WORDS = {
+    "no",
+    "none",
+    "nothing",
+    "nope",
+    "nah",
+    "not",
+    "n",
+    "na",
+}
+
+REFUSAL_WORDS = NEGATIVE_WORDS | {
+    "a",
+    "really",
+    "at",
+    "all",
+    "else",
+    "other",
+    "more",
+    "thanks",
+    "thank",
+    "you",
+    "that",
+    "s",
+    "it",
+    "i",
+    "have",
+    "any",
+    "concern",
+    "concerns",
+    "worry",
+    "worries",
+    "problem",
+    "problems",
+}
+
+_NEGATION_WORDS = {
+    "not",
+    "no",
+    "never",
+    "isn",
+    "wasn",
+    "doesn",
+    "don",
+    "didn",
+    "aren",
+    "nor",
+    "hardly",
+    "without",
+}
+
+_UNCERTAINTY_FRAGMENTS = (
+    "don't know",
+    "dont know",
+    "do not know",
+    "not sure",
+    "unsure",
+    "no idea",
+    "can't remember",
+    "cant remember",
+    "cannot remember",
+    "don't remember",
+    "do not remember",
+)
+
+_SEVERITY_WORDS = {"mild", "moderate", "severe"}
+_TOKEN_RE = re.compile(r"[0-9a-z]+")
+
+
+def _answer_words(answer: str) -> list[str]:
+    return _TOKEN_RE.findall(answer.strip().casefold())
+
+
+def _is_plain_no(answer: str) -> bool:
+    words = _answer_words(answer)
+    return (
+        bool(words)
+        and all(word in REFUSAL_WORDS for word in words)
+        and any(word in NEGATIVE_WORDS for word in words)
+    )
+
+
+def _is_hedged(answer: str) -> bool:
+    folded = answer.strip().casefold()
+    return any(fragment in folded for fragment in _UNCERTAINTY_FRAGMENTS)
+
+
+def _is_negated(answer: str) -> bool:
+    return any(word in _NEGATION_WORDS for word in _answer_words(answer))
+
+
+def _is_usable_answer(answer: str) -> bool:
+    stripped = answer.strip()
+    return bool(stripped) and not _is_plain_no(stripped) and not _is_hedged(stripped)
+
+
+def _severity_levels(answer: str) -> list[str]:
+    levels: list[str] = []
+    for word in _answer_words(answer):
+        if word in _SEVERITY_WORDS and word not in levels:
+            levels.append(word)
+    return levels
+
+
+def _is_single_level_words(words: list[str]) -> bool:
+    unique = set(words)
+    return len(unique) == 1 and unique <= _SEVERITY_WORDS
+
+
+def _fill_from_answers(
+    new_record: PatientRecord, asked: list[QuestionAnswer]
+) -> PatientRecord:
+    filled = copy.deepcopy(new_record)
+    last_answer: dict[str, str] = {}
+    for item in asked:
+        field = _QUESTION_FIELDS.get(item.question.casefold().strip())
+        if field is None:
+            continue
+        last_answer[field] = item.answer.strip()
+    if (
+        filled.onset is None
+        and "onset" in last_answer
+        and _is_usable_answer(last_answer["onset"])
+    ):
+        filled.onset = last_answer["onset"]
+    if (
+        filled.duration is None
+        and "duration" in last_answer
+        and _is_usable_answer(last_answer["duration"])
+    ):
+        filled.duration = last_answer["duration"]
+    if "severity" in last_answer:
+        answer = last_answer["severity"]
+        if answer and not _is_plain_no(answer):
+            words = _answer_words(answer)
+            levels = _severity_levels(answer)
+            if (
+                filled.severity is None
+                and len(levels) == 1
+                and not _is_hedged(answer)
+                and not _is_negated(answer)
+            ):
+                filled.severity = levels[0]
+            if (
+                filled.severity_note is None
+                and not _is_single_level_words(words)
+                and (not _is_hedged(answer) or levels)
+            ):
+                filled.severity_note = answer
+    if (
+        not filled.concerns
+        and "concerns" in last_answer
+        and _is_usable_answer(last_answer["concerns"])
+    ):
+        filled.concerns = [last_answer["concerns"]]
+    return filled
 
 
 def next_question(
@@ -194,4 +359,6 @@ def merge_answers(
     user = _build_user_message(record, asked)
     data = chat_json(MERGE_SYSTEM, user, validate=validate, config=config)
     normalized, _problems = _normalize_answer(data)
-    return recompute_missing_information(record_from_dict(normalized))
+    updated = record_from_dict(normalized)
+    updated = _fill_from_answers(updated, asked)
+    return recompute_missing_information(updated)

@@ -7,7 +7,7 @@ import pytest
 
 from core import interview, llm
 from core.fixtures import get_fixture
-from core.interview import next_question
+from core.interview import QUESTIONS_ON_BEHALF, next_question
 from core.prompts import MERGE_SYSTEM
 from core.schema import (
     Medicine,
@@ -16,6 +16,7 @@ from core.schema import (
     missing_fields,
     record_to_dict,
 )
+from core.summarize import build_doctor_card
 
 SEVERITY = "How bad is it: mild, moderate or severe?"
 ONSET = "When did it start?"
@@ -32,6 +33,7 @@ ALLERGIES_ON_BEHALF = "Does the patient have any allergies?"
 ALLERGIES_SELF = "Do you have any allergies?"
 HISTORY_SELF = "Do you have any ongoing or past health conditions?"
 HISTORY_ON_BEHALF = "Does the patient have any ongoing or past health conditions?"
+CONCERNS = "Is there anything you are worried about or want to ask the doctor?"
 
 
 def test_empty_record_asks_severity():
@@ -527,3 +529,381 @@ def test_merge_inputs_unchanged_after_successful_call(monkeypatch):
     assert record_to_dict(record) == record_before
     assert [(item.question, item.answer) for item in asked] == asked_before
     assert result is not record
+
+
+# ---------------------------------------------------------------------------
+# deterministic fill-in after merge (task P1-5b-FIX-1)
+# ---------------------------------------------------------------------------
+
+
+def _echo(record, **overrides):
+    data = record_to_dict(record)
+    data.update(overrides)
+    return data
+
+
+def test_fill_duration_from_answer(monkeypatch):
+    record = get_fixture("chest_pain")
+    asked = [QuestionAnswer(DURATION, "It comes and goes, for two days.")]
+    record_before = record_to_dict(record)
+    asked_before = [(item.question, item.answer) for item in asked]
+    fake = FakeChatJson(data=_echo(record))
+    monkeypatch.setattr(interview, "chat_json", fake)
+    result = interview.merge_answers(record, asked, config=CONFIG)
+    assert result.duration == "It comes and goes, for two days."
+    assert result.onset == "two days ago"
+    assert "duration" not in result.missing_information
+    assert result.missing_information == missing_fields(result)
+    assert record_to_dict(record) == record_before
+    assert [(item.question, item.answer) for item in asked] == asked_before
+
+
+def test_fill_duration_with_on_behalf_question(monkeypatch):
+    record = get_fixture("chest_pain")
+    record.reporting_on_behalf = True
+    asked = [
+        QuestionAnswer(QUESTIONS_ON_BEHALF["duration"], "It comes and goes, for two days.")
+    ]
+    record_before = record_to_dict(record)
+    asked_before = [(item.question, item.answer) for item in asked]
+    fake = FakeChatJson(data=_echo(record))
+    monkeypatch.setattr(interview, "chat_json", fake)
+    result = interview.merge_answers(record, asked, config=CONFIG)
+    assert result.duration == "It comes and goes, for two days."
+    assert record_to_dict(record) == record_before
+    assert [(item.question, item.answer) for item in asked] == asked_before
+
+
+def test_fill_keeps_model_set_duration(monkeypatch):
+    record = get_fixture("chest_pain")
+    asked = [QuestionAnswer(DURATION, "It comes and goes, for two days.")]
+    record_before = record_to_dict(record)
+    asked_before = [(item.question, item.answer) for item in asked]
+    fake = FakeChatJson(data=_echo(record, duration="two days"))
+    monkeypatch.setattr(interview, "chat_json", fake)
+    result = interview.merge_answers(record, asked, config=CONFIG)
+    assert result.duration == "two days"
+    assert record_to_dict(record) == record_before
+    assert [(item.question, item.answer) for item in asked] == asked_before
+
+
+def test_fill_uses_last_answer_for_same_field(monkeypatch):
+    record = get_fixture("chest_pain")
+    asked = [
+        QuestionAnswer(DURATION, "It comes and goes, for two days."),
+        QuestionAnswer(DURATION, "About two days, I think."),
+    ]
+    record_before = record_to_dict(record)
+    asked_before = [(item.question, item.answer) for item in asked]
+    fake = FakeChatJson(data=_echo(record))
+    monkeypatch.setattr(interview, "chat_json", fake)
+    result = interview.merge_answers(record, asked, config=CONFIG)
+    assert result.duration == "About two days, I think."
+    assert record_to_dict(record) == record_before
+    assert [(item.question, item.answer) for item in asked] == asked_before
+
+
+@pytest.mark.parametrize("answer", ["I'm not sure", "No"])
+def test_fill_onset_stays_none_for_unusable_answer(monkeypatch, answer):
+    record = get_fixture("empty")
+    asked = [QuestionAnswer(ONSET, answer)]
+    record_before = record_to_dict(record)
+    asked_before = [(item.question, item.answer) for item in asked]
+    fake = FakeChatJson(data=_echo(record))
+    monkeypatch.setattr(interview, "chat_json", fake)
+    result = interview.merge_answers(record, asked, config=CONFIG)
+    assert result.onset is None
+    assert record_to_dict(record) == record_before
+    assert [(item.question, item.answer) for item in asked] == asked_before
+
+
+def test_fill_severity_note_with_model_severity(monkeypatch):
+    record = get_fixture("chest_pain")
+    asked = [QuestionAnswer(SEVERITY, "Moderate, I think.")]
+    record_before = record_to_dict(record)
+    asked_before = [(item.question, item.answer) for item in asked]
+    fake = FakeChatJson(data=_echo(record, severity="moderate"))
+    monkeypatch.setattr(interview, "chat_json", fake)
+    result = interview.merge_answers(record, asked, config=CONFIG)
+    assert result.severity == "moderate"
+    assert result.severity_note == "Moderate, I think."
+    assert record_to_dict(record) == record_before
+    assert [(item.question, item.answer) for item in asked] == asked_before
+
+
+def test_fill_severity_and_note_when_model_severity_none(monkeypatch):
+    record = get_fixture("chest_pain")
+    asked = [QuestionAnswer(SEVERITY, "Moderate, I think.")]
+    record_before = record_to_dict(record)
+    asked_before = [(item.question, item.answer) for item in asked]
+    fake = FakeChatJson(data=_echo(record))
+    monkeypatch.setattr(interview, "chat_json", fake)
+    result = interview.merge_answers(record, asked, config=CONFIG)
+    assert result.severity == "moderate"
+    assert result.severity_note == "Moderate, I think."
+    assert record_to_dict(record) == record_before
+    assert [(item.question, item.answer) for item in asked] == asked_before
+
+
+def test_fill_severity_only_without_note(monkeypatch):
+    record = get_fixture("chest_pain")
+    asked = [QuestionAnswer(SEVERITY, "Moderate")]
+    record_before = record_to_dict(record)
+    asked_before = [(item.question, item.answer) for item in asked]
+    fake = FakeChatJson(data=_echo(record))
+    monkeypatch.setattr(interview, "chat_json", fake)
+    result = interview.merge_answers(record, asked, config=CONFIG)
+    assert result.severity == "moderate"
+    assert result.severity_note is None
+    assert record_to_dict(record) == record_before
+    assert [(item.question, item.answer) for item in asked] == asked_before
+
+
+def test_fill_two_levels_sets_note_only(monkeypatch):
+    record = get_fixture("chest_pain")
+    asked = [QuestionAnswer(SEVERITY, "Not severe, more like mild")]
+    record_before = record_to_dict(record)
+    asked_before = [(item.question, item.answer) for item in asked]
+    fake = FakeChatJson(data=_echo(record))
+    monkeypatch.setattr(interview, "chat_json", fake)
+    result = interview.merge_answers(record, asked, config=CONFIG)
+    assert result.severity is None
+    assert result.severity_note == "Not severe, more like mild"
+    assert record_to_dict(record) == record_before
+    assert [(item.question, item.answer) for item in asked] == asked_before
+
+
+def test_fill_keeps_model_severity_note(monkeypatch):
+    record = get_fixture("chest_pain")
+    asked = [QuestionAnswer(SEVERITY, "Moderate, I think.")]
+    record_before = record_to_dict(record)
+    asked_before = [(item.question, item.answer) for item in asked]
+    fake = FakeChatJson(
+        data=_echo(record, severity="moderate", severity_note="already noted")
+    )
+    monkeypatch.setattr(interview, "chat_json", fake)
+    result = interview.merge_answers(record, asked, config=CONFIG)
+    assert result.severity == "moderate"
+    assert result.severity_note == "already noted"
+    assert record_to_dict(record) == record_before
+    assert [(item.question, item.answer) for item in asked] == asked_before
+
+
+def test_fill_concerns_from_answer(monkeypatch):
+    record = get_fixture("empty")
+    asked = [QuestionAnswer(CONCERNS, "Is it my heart?")]
+    record_before = record_to_dict(record)
+    asked_before = [(item.question, item.answer) for item in asked]
+    fake = FakeChatJson(data=_echo(record))
+    monkeypatch.setattr(interview, "chat_json", fake)
+    result = interview.merge_answers(record, asked, config=CONFIG)
+    assert result.concerns == ["Is it my heart?"]
+    assert record_to_dict(record) == record_before
+    assert [(item.question, item.answer) for item in asked] == asked_before
+
+
+def test_fill_concerns_keeps_existing(monkeypatch):
+    record = get_fixture("chest_pain")
+    asked = [QuestionAnswer(CONCERNS, "Is it my heart?")]
+    record_before = record_to_dict(record)
+    asked_before = [(item.question, item.answer) for item in asked]
+    fake = FakeChatJson(data=_echo(record))
+    monkeypatch.setattr(interview, "chat_json", fake)
+    result = interview.merge_answers(record, asked, config=CONFIG)
+    assert result.concerns == ["I'm worried it's my heart."]
+    assert record_to_dict(record) == record_before
+    assert [(item.question, item.answer) for item in asked] == asked_before
+
+
+def test_fill_never_fills_medicines(monkeypatch):
+    record = get_fixture("child_cough")
+    asked = [QuestionAnswer(MEDICINES_ON_BEHALF, "Only paracetamol.")]
+    record_before = record_to_dict(record)
+    asked_before = [(item.question, item.answer) for item in asked]
+    fake = FakeChatJson(data=_echo(record))
+    monkeypatch.setattr(interview, "chat_json", fake)
+    result = interview.merge_answers(record, asked, config=CONFIG)
+    assert result.medicines == []
+    assert result.medicines_denied is None
+    assert record_to_dict(record) == record_before
+    assert [(item.question, item.answer) for item in asked] == asked_before
+
+
+def test_fill_unmatched_question_changes_nothing(monkeypatch):
+    record = get_fixture("chest_pain")
+    asked = [QuestionAnswer("What color is the sky?", "Blue.")]
+    record_before = record_to_dict(record)
+    asked_before = [(item.question, item.answer) for item in asked]
+    fake = FakeChatJson(data=_echo(record))
+    monkeypatch.setattr(interview, "chat_json", fake)
+    result = interview.merge_answers(record, asked, config=CONFIG)
+    assert record_to_dict(result) == record_before
+    assert [(item.question, item.answer) for item in asked] == asked_before
+
+
+# ---------------------------------------------------------------------------
+# fill-in must never invent a fact (task P1-5b-FIX-2)
+# ---------------------------------------------------------------------------
+
+SEVERITY_FILL_CASES = [
+    ("Moderate", "moderate", None),
+    ("moderate.", "moderate", None),
+    ("Moderate, I think.", "moderate", "Moderate, I think."),
+    ("maybe moderate", "moderate", "maybe moderate"),
+    ("I'm not sure, maybe moderate", None, "I'm not sure, maybe moderate"),
+    ("Not severe.", None, "Not severe."),
+    ("No, it is not severe.", None, "No, it is not severe."),
+    ("It isn't severe", None, "It isn't severe"),
+    ("mild to moderate", None, "mild to moderate"),
+    ("Not severe, more like mild", None, "Not severe, more like mild"),
+    ("really bad", None, "really bad"),
+    ("I don't know", None, None),
+    ("No.", None, None),
+]
+
+
+@pytest.mark.parametrize(
+    "answer,expected_severity,expected_note", SEVERITY_FILL_CASES
+)
+def test_fill_severity_table(monkeypatch, answer, expected_severity, expected_note):
+    record = get_fixture("empty")
+    asked = [QuestionAnswer(SEVERITY, answer)]
+    record_before = record_to_dict(record)
+    asked_before = [(item.question, item.answer) for item in asked]
+    fake = FakeChatJson(data=_echo(record, severity=None, severity_note=None))
+    monkeypatch.setattr(interview, "chat_json", fake)
+    result = interview.merge_answers(record, asked, config=CONFIG)
+    assert result.severity == expected_severity
+    assert result.severity_note == expected_note
+    assert record_to_dict(record) == record_before
+    assert [(item.question, item.answer) for item in asked] == asked_before
+
+
+def test_fill_keeps_model_severity_over_answer_level(monkeypatch):
+    record = get_fixture("empty")
+    asked = [QuestionAnswer(SEVERITY, "Severe")]
+    record_before = record_to_dict(record)
+    asked_before = [(item.question, item.answer) for item in asked]
+    fake = FakeChatJson(data=_echo(record, severity="mild"))
+    monkeypatch.setattr(interview, "chat_json", fake)
+    result = interview.merge_answers(record, asked, config=CONFIG)
+    assert result.severity == "mild"
+    assert result.severity_note is None
+    assert record_to_dict(record) == record_before
+    assert [(item.question, item.answer) for item in asked] == asked_before
+
+
+def test_fill_never_replaces_model_severity_note(monkeypatch):
+    record = get_fixture("empty")
+    asked = [QuestionAnswer(SEVERITY, "Moderate, I think.")]
+    record_before = record_to_dict(record)
+    asked_before = [(item.question, item.answer) for item in asked]
+    fake = FakeChatJson(data=_echo(record, severity_note="model note"))
+    monkeypatch.setattr(interview, "chat_json", fake)
+    result = interview.merge_answers(record, asked, config=CONFIG)
+    assert result.severity == "moderate"
+    assert result.severity_note == "model note"
+    assert record_to_dict(record) == record_before
+    assert [(item.question, item.answer) for item in asked] == asked_before
+
+
+PLAIN_NO_ANSWERS = [
+    "No",
+    "No.",
+    "None.",
+    "Nope",
+    "N/A",
+    "No, not really.",
+    "Nothing else, thanks.",
+    "I have no concerns.",
+    "No worries",
+    "That's it, nothing else",
+]
+
+PLAIN_NO_FIELDS = (
+    ("onset", ONSET),
+    ("duration", DURATION),
+    ("concerns", CONCERNS),
+)
+
+
+@pytest.mark.parametrize("answer", PLAIN_NO_ANSWERS)
+@pytest.mark.parametrize("field,question", PLAIN_NO_FIELDS)
+def test_fill_plain_no_leaves_field_empty(monkeypatch, field, question, answer):
+    record = get_fixture("empty")
+    asked = [QuestionAnswer(question, answer)]
+    record_before = record_to_dict(record)
+    asked_before = [(item.question, item.answer) for item in asked]
+    fake = FakeChatJson(data=_echo(record))
+    monkeypatch.setattr(interview, "chat_json", fake)
+    result = interview.merge_answers(record, asked, config=CONFIG)
+    if field == "concerns":
+        assert result.concerns == []
+    else:
+        assert getattr(result, field) is None
+    assert record_to_dict(record) == record_before
+    assert [(item.question, item.answer) for item in asked] == asked_before
+
+
+def test_fill_onset_verbatim_with_time_answer(monkeypatch):
+    record = get_fixture("empty")
+    asked = [QuestionAnswer(ONSET, "Two days ago")]
+    record_before = record_to_dict(record)
+    asked_before = [(item.question, item.answer) for item in asked]
+    fake = FakeChatJson(data=_echo(record))
+    monkeypatch.setattr(interview, "chat_json", fake)
+    result = interview.merge_answers(record, asked, config=CONFIG)
+    assert result.onset == "Two days ago"
+    assert record_to_dict(record) == record_before
+    assert [(item.question, item.answer) for item in asked] == asked_before
+
+
+def test_fill_onset_verbatim_with_negation(monkeypatch):
+    record = get_fixture("empty")
+    asked = [QuestionAnswer(ONSET, "Never had it before")]
+    record_before = record_to_dict(record)
+    asked_before = [(item.question, item.answer) for item in asked]
+    fake = FakeChatJson(data=_echo(record))
+    monkeypatch.setattr(interview, "chat_json", fake)
+    result = interview.merge_answers(record, asked, config=CONFIG)
+    assert result.onset == "Never had it before"
+    assert record_to_dict(record) == record_before
+    assert [(item.question, item.answer) for item in asked] == asked_before
+
+
+def test_fill_concerns_verbatim_with_leading_no(monkeypatch):
+    record = get_fixture("empty")
+    asked = [QuestionAnswer(CONCERNS, "No, but I worry it is my heart")]
+    record_before = record_to_dict(record)
+    asked_before = [(item.question, item.answer) for item in asked]
+    fake = FakeChatJson(data=_echo(record))
+    monkeypatch.setattr(interview, "chat_json", fake)
+    result = interview.merge_answers(record, asked, config=CONFIG)
+    assert result.concerns == ["No, but I worry it is my heart"]
+    assert record_to_dict(record) == record_before
+    assert [(item.question, item.answer) for item in asked] == asked_before
+
+
+def test_fill_end_to_end_doctor_card_never_invents(monkeypatch):
+    record = get_fixture("child_cough")
+    record.severity = None
+    record.severity_note = None
+    record.duration = None
+    record.concerns = []
+    asked = [
+        QuestionAnswer(QUESTIONS_ON_BEHALF["severity"], "Not severe."),
+        QuestionAnswer(QUESTIONS_ON_BEHALF["duration"], "Nope"),
+        QuestionAnswer(QUESTIONS_ON_BEHALF["concerns"], "No."),
+    ]
+    record_before = record_to_dict(record)
+    asked_before = [(item.question, item.answer) for item in asked]
+    fake = FakeChatJson(data=_echo(record))
+    monkeypatch.setattr(interview, "chat_json", fake)
+    result = interview.merge_answers(record, asked, config=CONFIG)
+    card_lines = build_doctor_card(result).splitlines()
+    assert 'Severity: "Not severe."' in card_lines
+    assert "Duration: Not given" in card_lines
+    assert "Patient's concerns: Not given" in card_lines
+    assert "Severity: severe" not in build_doctor_card(result)
+    assert record_to_dict(record) == record_before
+    assert [(item.question, item.answer) for item in asked] == asked_before
