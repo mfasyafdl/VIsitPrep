@@ -2,14 +2,10 @@
 
 import pytest
 
-from core import extract, interview, llm, redflag, summarize
+from core import extract, interview, llm, summarize
 from core.schema import empty_record
 
 STUB_CALLS = [
-    pytest.param(lambda: redflag.scan_text("a short story"), id="redflag.scan_text"),
-    pytest.param(
-        lambda: redflag.check_alerts(empty_record()), id="redflag.check_alerts"
-    ),
     pytest.param(
         lambda: extract.extract_record("a short story"), id="extract.extract_record"
     ),
