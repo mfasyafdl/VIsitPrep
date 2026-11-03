@@ -103,6 +103,24 @@ def _empty_editor(section: str) -> dict:
     return values
 
 
+def _editor_field_values(state: dict, section: str) -> list:
+    """The field updates for one section editor.
+
+    While that editor is open and a save failed, the fields keep what
+    the patient typed (no-change updates). In every other case the
+    fields get the values of the stored record (or empty placeholders
+    while the record is not available).
+    """
+    if state["editing"] == section and state["error"] is not None:
+        return [gr.update() for _ in EDITOR_FIELDS[section]]
+    merged = state["step"] == STEP_3 and state["merged"] is True
+    if merged and state["record"] is not None:
+        editor = handlers.editor_values(state["record"], section)
+    else:
+        editor = _empty_editor(section)
+    return [gr.update(value=editor[key]) for key in EDITOR_FIELDS[section]]
+
+
 def _step3_values(state: dict) -> list:
     """The step 3 outputs: the checking line, the rows, the editors."""
     at_step3 = state["step"] == STEP_3
@@ -113,16 +131,13 @@ def _step3_values(state: dict) -> list:
         if record is not None:
             row = detail_row_html(record, section)
             label = change_label(record, section)
-            editor = handlers.editor_values(record, section)
         else:
             row = ""
             label = "Change"
-            editor = _empty_editor(section)
         values.append(row)
         values.append(gr.update(value=label, interactive=merged))
         values.append(gr.update(visible=state["editing"] == section))
-        for key in EDITOR_FIELDS[section]:
-            values.append(gr.update(value=editor[key]))
+        values.extend(_editor_field_values(state, section))
         values.append(gr.update(interactive=merged))
         values.append(gr.update(interactive=merged))
     return values

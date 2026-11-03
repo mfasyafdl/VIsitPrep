@@ -530,3 +530,29 @@ AC4. Same session: Change on Medicines, add the line "Paracetamol, when needed" 
 AC5. At 375px and 1280px on step 3 with one editor open: report document.documentElement.scrollWidth (must equal the viewport width).
 AC6. `git status --short` shows only files from "Files you may change".
 ```
+
+## P2-3a-FIX-1
+
+- Model: Qwen/Qwen3.8-27B
+- Date: 2026-11-03
+
+### Prompt (verbatim)
+
+```
+FIX P2-3a-1 — keep what the patient typed when a section save fails. Log section: P2-3a-FIX-1. Do not commit.
+
+Files to read: ui/layout.py, ui/handlers.py, tests/test_ui/test_handlers_steps34.py.
+Files you may change: ui/layout.py, tests/test_ui/test_components.py or a new tests/test_ui/test_layout_step3.py, docs/prompt_log_person2.md.
+
+Audit result: everything else in P2-3a passed an independent re-test (358 tests together with the latest main, real merge through core with a fake model, merge failure, alerts after an edit, dark mode). One defect: _step3_values in ui/layout.py writes editor_values(record, section) into every editor field on every render. After a failed save (for example "peanuts" typed with "No allergies" ticked → "Remove the items, or untick the box."), the render resets the open editor to the stored record, so the typed text and the tick disappear, and a second Save stores "Not given".
+
+Steps:
+1. In _step3_values, for the section whose editor is open (state["editing"] == section) while state["error"] is not None, return gr.update() (no change) for every field of that editor instead of the record values. In every other case keep the current behaviour (opening an editor still prefills it from the record).
+2. Move that decision into a small pure helper in ui/layout.py, for example _editor_field_values(state, section) -> list, so it can be tested without a browser, and add tests: open editor with no error → record values; open editor with an error → every value is a no-change update; a closed editor → record values.
+3. Append this prompt verbatim to docs/prompt_log_person2.md as section "## P2-3a-FIX-1" with the line "Model: Qwen/Qwen3.8-27B", inside a ``` code block. Do not change earlier sections.
+
+Acceptance criteria:
+AC1. `python -m pytest -q` passes; report the count.
+AC2. Manual with VISITPREP_PREVIEW=1 on port 7861 at 375px: child_cough story → Continue → "I'm done, check my details" → Change on Allergies → type "peanuts", tick "No allergies", Save. Report the textbox content and the tick state after the error (must still be "peanuts" and ticked). Untick, Save, report the Allergies row (must show peanuts).
+AC3. `git status --short` shows only files from "Files you may change".
+```
