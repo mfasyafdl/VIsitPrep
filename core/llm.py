@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Callable
 
 BASE_URL = "https://api-inference.modelscope.ai/v1"
-DEFAULT_MODEL = "zai-org/GLM-5.2"
+DEFAULT_MODEL = "Qwen/Qwen3.8-27B"
 ALLOWED_MODELS = (
     "zai-org/GLM-5.2",
     "deepseek-ai/DeepSeek-V4-Pro-0813",
