@@ -743,11 +743,13 @@ body {{
   }}
 }}
 
-/* Step 4: the Download PDF button and its status line. */
+/* Step 4: the Download PDF button and its status line. Below 1024px
+   the row stacks (button full width, status under it); from 1024px
+   they sit side by side. */
 #vp-root #vp-pdf-row {{
   display: flex;
-  align-items: center;
-  justify-content: flex-start;
+  flex-direction: column;
+  align-items: stretch;
   gap: 16px;
   width: 100%;
   background: var(--vp-ground);
@@ -755,10 +757,32 @@ body {{
 }}
 
 #vp-root #vp-pdf-row .column {{
-  flex: 0 0 auto;
+  flex: 1 1 auto;
+  width: 100%;
   min-width: 0;
   background: var(--vp-ground);
   color: var(--vp-ink);
+}}
+
+#vp-root #vp-pdf-row .column button {{
+  width: 100%;
+}}
+
+@media (min-width: 1024px) {{
+  #vp-root #vp-pdf-row {{
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-start;
+  }}
+
+  #vp-root #vp-pdf-row .column {{
+    flex: 0 0 auto;
+    width: auto;
+  }}
+
+  #vp-root #vp-pdf-row .column button {{
+    width: auto;
+  }}
 }}
 
 #vp-root #vp-pdf-status p {{
