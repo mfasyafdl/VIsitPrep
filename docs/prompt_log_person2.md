@@ -958,3 +958,211 @@ AC4. Same session: Change my details → report whether the Download PDF button 
 AC5. At 1280px on step 4: scrollWidth must equal 1280, and the Download PDF button must sit above Change my details.
 AC6. `git status --short` shows only files from "Files you may change".
 ```
+
+## P2-6
+
+- Model: Qwen/Qwen3.8-27B
+- Date: 2026-11-04
+
+### Prompt (verbatim)
+
+```
+ROLE: You are the coding agent for Person 2 of VisitPrep, a new Python 3.10 + Gradio app, English only, that helps a patient prepare for a doctor visit. It organizes what the patient reports. It never diagnoses, never recommends treatment or medication changes.
+
+TEAM: Two people build this in parallel. Person 2 (you) owns app.py, ui/, tests/test_ui/, docs/deployment.md and docs/prompt_log_person2.md. Person 1 owns AGENTS.md, requirements*.txt, .gitignore, .env.example, docs/data_contract.md, core/, tests/test_core/, README.md and scripts/. Never edit Person 1's files, even to fix a bug; write a handoff with an exact reproduction instead. If you need a new dependency, ask for it in the handoff.
+
+BEFORE YOU WRITE CODE:
+1. Read AGENTS.md and docs/data_contract.md in full. Then read only the files listed under "Files to read" in the task.
+2. Write a short plan: the files you will change and one line per file on what changes. Then continue; do not wait for approval unless a rule below says stop.
+
+HARD RULES (breaking any of these means the task failed):
+- Only edit files listed under "Files you may change".
+- ui/ has no business logic. Alerts come only from core.redflag. Questions come only from core.interview. Summaries come only from core.summarize. Never reimplement any of them, and never write red-flag trigger words in ui/.
+- Event handlers live in ui/handlers.py as plain functions that take the session state dict plus inputs and return a new state dict; they never import gradio. ui/layout.py only builds components and wires events to those functions.
+- null means unknown. Never turn null into False, 0, "" or "none".
+- Escape every piece of patient text before it goes into gr.HTML or the PDF.
+- No catch-all `except Exception` that hides a failure. Show a visible English message instead.
+- Never print, log or hard-code MODELSCOPE_API_KEY. Tests never use the network.
+- Do not commit, push, merge or change git config. Do not touch any app I am running on port 7860; if you launch the app, use port 7861.
+- All user-facing text is English.
+
+WORK STYLE:
+- Do the steps in order. If one is impossible, say why in the report and continue with the next.
+- Make the smallest change that meets the acceptance criteria. No unrelated refactors.
+- After each file change, run `python -m pytest -q tests/test_ui` and fix failures before moving on. If the same command fails twice for a reason you cannot fix, stop and report the full error.
+- If something is ambiguous, ask me one specific question and stop.
+
+FINAL REPORT (use exactly these headings):
+## Plan vs done
+One line per planned item: DONE / PARTLY / NOT DONE, with file and function.
+## Acceptance criteria
+One line per criterion: PASS / FAIL / NOT RUN, with evidence (the command and the relevant output line, or what you saw).
+## Test results
+The exact last line of `python -m pytest -q`, with totals for tests/test_core and tests/test_ui.
+## Not verified
+Anything you did not check, and why. Never write "should work". If you did not run it, write NOT RUN.
+## Handoff for Person 1
+Exact reproductions or requests (file, function, input, expected, actual), or "None".
+## prompt_log
+Confirm you appended this whole prompt verbatim (Block A2, any extra block, and the task card, exactly as pasted) to docs/prompt_log_person2.md under the section id in the task title, with the model name "Qwen/Qwen3.8-27B", and that earlier sections are unchanged.
+
+DESIGN RULES v2 (exact values from the approved UI preview; do not invent other colours or sizes):
+
+Colour tokens: define each once as a CSS custom property on #vp-root (light values), and override them under `.dark #vp-root` (Gradio's dark class). Dark tokens come ONLY from the .dark class; never add a @media (prefers-color-scheme) block (Gradio already sets .dark in system mode, and the media block breaks ?__theme=light). --vp-ground and --vp-ink are also defined on :root and .dark so the page body uses the ground colour. No hard-coded hex anywhere else. Every rule that sets a background also sets color.
+  token                    light      dark
+  --vp-ground              #EEF4F2    #0E1A1C
+  --vp-surface             #FFFFFF    #16252A
+  --vp-ink                 #15232A    #E3EEEC
+  --vp-ink-2               #44565E    #AFC2C1
+  --vp-primary             #0B6B60    #4FC1B1
+  --vp-on-primary          #FFFFFF    #052421
+  --vp-pressed-edge        #06443D    #2E8C80
+  --vp-tint                #DCEEEA    #1D3A3A
+  --vp-on-tint             #0B4F47    #BDEDE5
+  --vp-input-border        #6B7F84    #6F8A8D   (2px)
+  --vp-hairline            #D3E0DD    #27393D
+  --vp-urgent-band         #C42B1C    #C42B1C   (band text #FFFFFF in both)
+  --vp-urgent-card-border  #C42B1C    #FF8A7A
+  --vp-attn-band           #FFD84D    #FFD84D   (band text #15232A in both)
+  Focus on every button, input, chip and link: outline 4px solid #FFD84D plus an inner 2px edge in --vp-ink (box-shadow inset).
+  Header bar: --vp-primary background with --vp-on-primary text in light mode; --vp-surface with --vp-ink text in dark mode.
+
+Type: "Atkinson Hyperlegible Next" from Google Fonts (weights 400, 600, 700, 800), fallback system-ui, sans-serif. Body 17px, helper text 15px, h1 26px below 1024px and 34px from 1024px. Inputs at least 17px.
+
+Buttons: 52px tall, radius 8px. Primary: filled --vp-primary, text --vp-on-primary, 4px bottom edge in --vp-pressed-edge (box-shadow 0 4px 0) that disappears while pressed (translateY 2px). Secondary: --vp-surface background, 2px --vp-primary border, --vp-primary text. Link-style: no background, underlined --vp-primary text, at least 44px tall. Exactly one primary button per step.
+
+Alerts are care cards: a coloured band whose heading names the action, then a body on --vp-surface.
+  Urgent: band --vp-urgent-band, an h2 heading "Get medical help now" that starts with a visually hidden "Urgent advice:" (class vp-sr-only). Card border 2px --vp-urgent-card-border. Body = core's alert message verbatim, escaped. Exactly one "Call 119" link with href="tel:119" styled as a button (class vp-btn-call: --vp-urgent-band background, white text, 52px, radius 8px, full width below 1024px) inside the card body.
+  Attention: band --vp-attn-band, heading "Tell your doctor about this", hidden "Attention:", body verbatim, no call button.
+  Container: always rendered; role="alert" when any urgent alert is present, otherwise aria-live="polite". With no alerts it is an empty container with no height and never says "no alerts" or "you are safe".
+
+Errors use --vp-surface with a 2px --vp-ink-2 border, never urgent red.
+
+Page order on every step: header bar (brand "VisitPrep" left, "Start over" link-style right) → alert area → "**Step N of 4**, <label>" with a 4-segment progress bar (labels: describe your symptoms / a few questions / check your details / your summary) → step content → action buttons → footer.
+Full-bleed page: no Gradio padding around #vp-root; 16px side padding below 1024px, 24px from 1024px.
+Footer text: "Before you type: your notes are sent to ModelScope to be organized. Leave out your name, address and phone number. The provider doesn't promise to delete them, and closing this tab doesn't delete them right away." then "VisitPrep doesn't diagnose, give medical advice or suggest treatment."
+Desktop from 1024px: a 250px progress rail on the left (current step: --vp-tint background, 3px --vp-primary left border, aria-current="step") and the content on the right. Below 1024px: one column, rail hidden. Rail labels: Describe / Questions / Check details / Your summary.
+ui/theme.py and ui/components.py already implement all of the above (merged in P2-1 and P2-1-FIX-1). Reuse their classes and functions; do not rewrite or duplicate the theme.
+
+TASK P2-6 — Deployment readiness: safe launch settings, full-width Download PDF on phones, and docs/deployment.md. Log section: P2-6.
+
+Files to read: AGENTS.md, app.py, requirements.txt, .gitignore, .env.example, core/llm.py (read only: the environment variable names), ui/theme.py (only the breakpoints and the #vp-pdf-row rules), ui/layout.py (only the step 4 part).
+Files you may change: app.py, ui/theme.py (only the #vp-pdf-row rules), tests/test_ui/test_app_launch.py (new), docs/deployment.md (new), docs/prompt_log_person2.md.
+Do not edit core/, ui/handlers.py, ui/export_pdf.py, requirements*.txt, .env.example or tests/test_core/.
+
+Facts (checked on main 29143d9 with Gradio 6.31.0):
+- app.py passes css, head and show_error to demo.launch() inside `if __name__ == "__main__":`.
+- Gradio 6.31.0 keeps a run history by default. After one Continue, the patient's story is saved in the browser's localStorage and shown at /gradio_api/runs, and Start over does not clear it. launch(run_history=False) turns this off and deletes runs this app saved earlier in that browser (tested: localStorage no longer holds the story, and /gradio_api/runs returns {"detail":"Not found"}).
+- launch(footer_links=[]) removes Gradio's own footer ("Use via API · Built with Gradio · Settings"). The VisitPrep footer text stays (tested).
+- core/llm.py reads MODELSCOPE_API_KEY and MODELSCOPE_MODEL from the environment or from a .env file next to app.py. BASE_URL is https://api-inference.modelscope.ai/v1. DEFAULT_MODEL is still zai-org/GLM-5.2 until Person 1's P1-7a lands, so on Studio MODELSCOPE_MODEL must be set to Qwen/Qwen3.8-27B.
+- At 375px the Download PDF button is only as wide as its text, while Change my details is full width.
+
+Facts from the official competition guide (do not contradict them):
+- Publish at modelscope.ai → Studios → New Studio. The name may contain only letters, numbers, hyphens and underscores. Visibility must be Public.
+- Upload files on the Contents page or with "Upload via Git". Only uploaded files are deployed.
+- Framework: Gradio. Resources: free CPU only. Environment: choose a Python version; the guide's example is Python 3.10.
+- Secrets go in the Studio deployment settings (Variables / Secrets).
+- Publishing takes about 10 minutes; "View log" shows build logs. Public URL: https://modelscope.ai/studios/<username>/<space-name>.
+- No API key or token in the source code.
+For anything else (entry-point file, start command, expected port, whether README metadata is needed), check the official ModelScope documentation and quote its URL; if you cannot reach it, mark the item UNVERIFIED. Do not guess.
+
+Steps:
+1. app.py:
+   a. Add a module-level function launch_kwargs() -> dict that returns: server_name "0.0.0.0", server_port int(os.environ.get("PORT", "7860")), css THEME_CSS, head THEME_HEAD, show_error False, footer_links [], run_history False. It reads PORT when called, not at import.
+   b. `if __name__ == "__main__": demo.launch(**launch_kwargs())`. Keep `demo = gr.Blocks(title="VisitPrep")`, build_interface() and demo.queue(default_concurrency_limit=4) at module level, unchanged. Update the comment to say why run_history is off (patient text must not stay in the browser).
+2. ui/theme.py, #vp-pdf-row only: below 1024px the row stacks (flex-direction column, align-items stretch), and the Download PDF button and its column are 100% wide, with the status line under the button. From 1024px keep the current look. Use existing tokens only; no new hex values.
+3. tests/test_ui/test_app_launch.py (no network, no API key needed): import app and check launch_kwargs():
+   - run_history is False and footer_links == [];
+   - show_error is False and server_name == "0.0.0.0";
+   - server_port is 7860 when PORT is unset and 7861 when PORT=7861 (monkeypatch.setenv / delenv);
+   - css is ui.theme.THEME_CSS and head is ui.theme.THEME_HEAD;
+   - the app.py source contains no "ms-" followed by 8 hex characters and no "MODELSCOPE_API_KEY=".
+4. docs/deployment.md (English):
+   a. Numbered steps: create the Studio (name rule, Public), choose Gradio + free CPU + Python 3.10, upload, add secrets, deploy, read "View log".
+   b. Upload list exactly: app.py, requirements.txt, core/ and ui/ (including ui/assets/fonts/ with the .ttf and OFL.txt), README.md. Never upload: .env, .venv/, __pycache__/, tests/, scripts/, *.pdf.
+   c. Secrets: MODELSCOPE_API_KEY (the team's key, typed only into Studio) and MODELSCOPE_MODEL=Qwen/Qwen3.8-27B. In bold: "Never set VISITPREP_PREVIEW on Studio."
+   d. After-deploy checks: the page opens in an incognito window and on a phone; the teal header and the Atkinson font are visible (if the page looks like plain Gradio, Studio did not run `python app.py` → see troubleshooting); no "Built with Gradio" footer; the full flow works up to Download PDF; <public URL>/gradio_api/runs shows Not found.
+   e. A troubleshooting table: dependency build failure, "not configured" banner (secret missing or misspelt), quota/rate message, port error, blank page, plain Gradio look without the theme.
+   f. A pre-upload token scan: `git grep -n -E "ms-[0-9a-f]{8}"` (expected: empty) and `git grep -n "MODELSCOPE_API_KEY="` (expected: only the empty line in .env.example).
+5. Run both token-scan commands and paste their output.
+6. Append this prompt verbatim to docs/prompt_log_person2.md as section "## P2-6" with the line "Model: Qwen/Qwen3.8-27B", inside a ``` code block. Do not change earlier sections.
+
+Acceptance criteria:
+AC1. `python -m pytest -q` passes; report the total and the tests/test_ui count.
+AC2. `VISITPREP_PREVIEW=1` and `PORT=7861`, `python app.py`, at 375px (Playwright or Chrome by hand): child_cough example story → Continue → I'm done → Write my summary. Report the width in px of Download PDF and of Change my details (must be equal within 2px) and document.documentElement.scrollWidth (must be 375).
+AC3. Same session: the page text does not contain "Built with Gradio"; after Continue, JSON.stringify(localStorage) does not contain the word "cough"; http://127.0.0.1:7861/gradio_api/runs returns Not found.
+AC4. The theme is still applied: getComputedStyle(#vp-root).fontFamily starts with "Atkinson Hyperlegible Next" in both light and ?__theme=dark.
+AC5. At 1280px on step 4: Download PDF sits above Change my details and scrollWidth is 1280.
+AC6. Token-scan output pasted (step 5).
+AC7. Hosted verification: write PENDING (Bian deploys by hand after the merge).
+AC8. `git status --short` shows only files from "Files you may change".
+```
+
+## P2-6-FIX-1
+
+- Model: Qwen/Qwen3.8-27B
+- Date: 2026-11-04
+
+### Prompt (verbatim)
+
+```
+ROLE: You are the coding agent for Person 2 of VisitPrep, a new Python 3.10 + Gradio app, English only, that helps a patient prepare for a doctor visit. It organizes what the patient reports. It never diagnoses, never recommends treatment or medication changes.
+
+TEAM: Two people build this in parallel. Person 2 (you) owns app.py, ui/, tests/test_ui/, docs/deployment.md and docs/prompt_log_person2.md. Person 1 owns AGENTS.md, requirements*.txt, .gitignore, .env.example, docs/data_contract.md, core/, tests/test_core/, README.md and scripts/. Never edit Person 1's files, even to fix a bug; write a handoff with an exact reproduction instead. If you need a new dependency, ask for it in the handoff.
+
+BEFORE YOU WRITE CODE:
+1. Read AGENTS.md and docs/data_contract.md in full. Then read only the files listed under "Files to read" in the task.
+2. Write a short plan: the files you will change and one line per file on what changes. Then continue; do not wait for approval unless a rule below says stop.
+
+HARD RULES (breaking any of these means the task failed):
+- Only edit files listed under "Files you may change".
+- ui/ has no business logic. Alerts come only from core.redflag. Questions come only from core.interview. Summaries come only from core.summarize. Never reimplement any of them, and never write red-flag trigger words in ui/.
+- Event handlers live in ui/handlers.py as plain functions that take the session state dict plus inputs and return a new state dict; they never import gradio. ui/layout.py only builds components and wires events to those functions.
+- null means unknown. Never turn null into False, 0, "" or "none".
+- Escape every piece of patient text before it goes into gr.HTML or the PDF.
+- No catch-all `except Exception` that hides a failure. Show a visible English message instead.
+- Never print, log or hard-code MODELSCOPE_API_KEY. Tests never use the network.
+- Do not commit, push, merge or change git config. Do not touch any app I am running on port 7860; if you launch the app, use port 7861.
+- All user-facing text is English.
+
+WORK STYLE:
+- Do the steps in order. If one is impossible, say why in the report and continue with the next.
+- Make the smallest change that meets the acceptance criteria. No unrelated refactors.
+- After each file change, run `python -m pytest -q tests/test_ui` and fix failures before moving on. If the same command fails twice for a reason you cannot fix, stop and report the full error.
+- If something is ambiguous, ask me one specific question and stop.
+
+FINAL REPORT (use exactly these headings):
+## Plan vs done
+One line per planned item: DONE / PARTLY / NOT DONE, with file and function.
+## Acceptance criteria
+One line per criterion: PASS / FAIL / NOT RUN, with evidence (the command and the relevant output line, or what you saw).
+## Test results
+The exact last line of `python -m pytest -q`, with totals for tests/test_core and tests/test_ui.
+## Not verified
+Anything you did not check, and why. Never write "should work". If you did not run it, write NOT RUN.
+## Handoff for Person 1
+Exact reproductions or requests (file, function, input, expected, actual), or "None".
+## prompt_log
+Confirm you appended this whole prompt verbatim (Block A2, any extra block, and the task card, exactly as pasted) to docs/prompt_log_person2.md under the section id in the task title, with the model name "Qwen/Qwen3.8-27B", and that earlier sections are unchanged.
+
+TASK P2-6-FIX-1 — Fix the pre-upload token scan in docs/deployment.md. Keep all the rules from the beginning of this session. Log section: P2-6-FIX-1.
+
+Files you may change: docs/deployment.md, docs/prompt_log_person2.md. Nothing else.
+
+Expected: the scan in section 7 checks only the files that are uploaded to Studio, and its expected output is true.
+Actual: section 7 says `git grep -n "MODELSCOPE_API_KEY="` should show only .env.example, but it also matches tests/test_core/test_llm.py (fake test values) and docs/prompt_log_person1.md. Those files are never uploaded.
+
+Steps:
+1. In docs/deployment.md section 7, replace both commands and their "Expected" lines with this single command and expected result:
+   git grep -n -E "ms-[0-9a-f]{8}|MODELSCOPE_API_KEY=" -- app.py requirements.txt README.md core ui
+   Expected: empty (no output, exit code 1). Explain in one sentence that it scans exactly the files from section 2, and that tests/, docs/ and .env.example are not uploaded and contain only fake values or empty lines.
+   Keep the closing paragraph ("If either command shows anything else, stop…") but change "either command" to "the command".
+2. Run the command and paste its output and exit code.
+3. Append this prompt verbatim to docs/prompt_log_person2.md as section "## P2-6-FIX-1" with the line "Model: Qwen/Qwen3.8-27B", inside a   code block. Do not change earlier sections.
+
+Acceptance criteria:
+AC1. The command output is empty and the exit code is 1.
+AC2.   python -m pytest -q  still passes (490).
+AC3.   git status --short  shows only docs/deployment.md and docs/prompt_log_person2.md.
+AC4. "Handoff for Person 1": None.
+```
