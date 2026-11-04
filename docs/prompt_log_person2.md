@@ -1097,3 +1097,72 @@ AC6. Token-scan output pasted (step 5).
 AC7. Hosted verification: write PENDING (Bian deploys by hand after the merge).
 AC8. `git status --short` shows only files from "Files you may change".
 ```
+
+## P2-6-FIX-1
+
+- Model: Qwen/Qwen3.8-27B
+- Date: 2026-11-04
+
+### Prompt (verbatim)
+
+```
+ROLE: You are the coding agent for Person 2 of VisitPrep, a new Python 3.10 + Gradio app, English only, that helps a patient prepare for a doctor visit. It organizes what the patient reports. It never diagnoses, never recommends treatment or medication changes.
+
+TEAM: Two people build this in parallel. Person 2 (you) owns app.py, ui/, tests/test_ui/, docs/deployment.md and docs/prompt_log_person2.md. Person 1 owns AGENTS.md, requirements*.txt, .gitignore, .env.example, docs/data_contract.md, core/, tests/test_core/, README.md and scripts/. Never edit Person 1's files, even to fix a bug; write a handoff with an exact reproduction instead. If you need a new dependency, ask for it in the handoff.
+
+BEFORE YOU WRITE CODE:
+1. Read AGENTS.md and docs/data_contract.md in full. Then read only the files listed under "Files to read" in the task.
+2. Write a short plan: the files you will change and one line per file on what changes. Then continue; do not wait for approval unless a rule below says stop.
+
+HARD RULES (breaking any of these means the task failed):
+- Only edit files listed under "Files you may change".
+- ui/ has no business logic. Alerts come only from core.redflag. Questions come only from core.interview. Summaries come only from core.summarize. Never reimplement any of them, and never write red-flag trigger words in ui/.
+- Event handlers live in ui/handlers.py as plain functions that take the session state dict plus inputs and return a new state dict; they never import gradio. ui/layout.py only builds components and wires events to those functions.
+- null means unknown. Never turn null into False, 0, "" or "none".
+- Escape every piece of patient text before it goes into gr.HTML or the PDF.
+- No catch-all `except Exception` that hides a failure. Show a visible English message instead.
+- Never print, log or hard-code MODELSCOPE_API_KEY. Tests never use the network.
+- Do not commit, push, merge or change git config. Do not touch any app I am running on port 7860; if you launch the app, use port 7861.
+- All user-facing text is English.
+
+WORK STYLE:
+- Do the steps in order. If one is impossible, say why in the report and continue with the next.
+- Make the smallest change that meets the acceptance criteria. No unrelated refactors.
+- After each file change, run `python -m pytest -q tests/test_ui` and fix failures before moving on. If the same command fails twice for a reason you cannot fix, stop and report the full error.
+- If something is ambiguous, ask me one specific question and stop.
+
+FINAL REPORT (use exactly these headings):
+## Plan vs done
+One line per planned item: DONE / PARTLY / NOT DONE, with file and function.
+## Acceptance criteria
+One line per criterion: PASS / FAIL / NOT RUN, with evidence (the command and the relevant output line, or what you saw).
+## Test results
+The exact last line of `python -m pytest -q`, with totals for tests/test_core and tests/test_ui.
+## Not verified
+Anything you did not check, and why. Never write "should work". If you did not run it, write NOT RUN.
+## Handoff for Person 1
+Exact reproductions or requests (file, function, input, expected, actual), or "None".
+## prompt_log
+Confirm you appended this whole prompt verbatim (Block A2, any extra block, and the task card, exactly as pasted) to docs/prompt_log_person2.md under the section id in the task title, with the model name "Qwen/Qwen3.8-27B", and that earlier sections are unchanged.
+
+TASK P2-6-FIX-1 — Fix the pre-upload token scan in docs/deployment.md. Keep all the rules from the beginning of this session. Log section: P2-6-FIX-1.
+
+Files you may change: docs/deployment.md, docs/prompt_log_person2.md. Nothing else.
+
+Expected: the scan in section 7 checks only the files that are uploaded to Studio, and its expected output is true.
+Actual: section 7 says `git grep -n "MODELSCOPE_API_KEY="` should show only .env.example, but it also matches tests/test_core/test_llm.py (fake test values) and docs/prompt_log_person1.md. Those files are never uploaded.
+
+Steps:
+1. In docs/deployment.md section 7, replace both commands and their "Expected" lines with this single command and expected result:
+   git grep -n -E "ms-[0-9a-f]{8}|MODELSCOPE_API_KEY=" -- app.py requirements.txt README.md core ui
+   Expected: empty (no output, exit code 1). Explain in one sentence that it scans exactly the files from section 2, and that tests/, docs/ and .env.example are not uploaded and contain only fake values or empty lines.
+   Keep the closing paragraph ("If either command shows anything else, stop…") but change "either command" to "the command".
+2. Run the command and paste its output and exit code.
+3. Append this prompt verbatim to docs/prompt_log_person2.md as section "## P2-6-FIX-1" with the line "Model: Qwen/Qwen3.8-27B", inside a   code block. Do not change earlier sections.
+
+Acceptance criteria:
+AC1. The command output is empty and the exit code is 1.
+AC2.   python -m pytest -q  still passes (490).
+AC3.   git status --short  shows only docs/deployment.md and docs/prompt_log_person2.md.
+AC4. "Handoff for Person 1": None.
+```

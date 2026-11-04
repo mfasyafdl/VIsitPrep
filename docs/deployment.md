@@ -90,20 +90,15 @@ Run these on the public URL:
 
 ## 7. Pre-upload token scan
 
-Run both commands from the repo root before uploading anything.
+Run this command from the repo root before uploading anything.
 
 ```sh
-git grep -n -E "ms-[0-9a-f]{8}"
+git grep -n -E "ms-[0-9a-f]{8}|MODELSCOPE_API_KEY=" -- app.py requirements.txt README.md core ui
 ```
 
-Expected: empty (no output).
+Expected: empty (no output, exit code 1). It scans exactly the files from
+section 2, while tests/, docs/ and .env.example are not uploaded and contain
+only fake values or empty lines.
 
-```sh
-git grep -n "MODELSCOPE_API_KEY="
-```
-
-Expected: only the empty line in `.env.example`
-(`.env.example:2:MODELSCOPE_API_KEY=`).
-
-If either command shows anything else, stop and fix it before uploading: no
+If the command shows anything else, stop and fix it before uploading: no
 API key or token may ever be in the source code.
